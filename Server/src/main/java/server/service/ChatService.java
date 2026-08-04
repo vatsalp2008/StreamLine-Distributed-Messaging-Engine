@@ -1,5 +1,7 @@
 package server.service;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import server.model.ChatMessage;
@@ -10,6 +12,8 @@ import java.util.concurrent.CompletableFuture;
 
 @Service
 public class ChatService {
+
+    private static final Logger log = LoggerFactory.getLogger(ChatService.class);
 
     private final MessageRepository messageRepository;
 
@@ -23,7 +27,7 @@ public class ChatService {
             message.setRoomId(roomId);
             messageRepository.save(message);
         } catch (Exception e) {
-            System.err.println("Error saving message: " + e.getMessage());
+            log.error("Failed to persist message for room {}: {}", roomId, e.getMessage(), e);
         }
         return CompletableFuture.completedFuture(null);
     }

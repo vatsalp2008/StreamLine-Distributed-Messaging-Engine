@@ -5,6 +5,8 @@ import server.service.ChatService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.*;
 import java.io.IOException;
@@ -18,6 +20,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
  */
 @Component
 public class ChatServerWSHandler implements WebSocketHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(ChatServerWSHandler.class);
 
     private final ObjectMapper objectMapperMSG = new ObjectMapper();
     private final Validator validator;
@@ -39,7 +43,7 @@ public class ChatServerWSHandler implements WebSocketHandler {
      */
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
-        System.out.println("---->>>>New connection to room: " + getRoomId(session));
+        log.debug("New connection {} to room {}", session.getId(), getRoomId(session));
     }
 
     /**
@@ -163,7 +167,7 @@ public class ChatServerWSHandler implements WebSocketHandler {
                 }
             }
         } catch (IOException e) {
-            System.err.println("Error sending message: " + e.getMessage());
+            log.warn("Failed to send response to session {}: {}", session.getId(), e.getMessage());
         }
     }
 
@@ -173,7 +177,7 @@ public class ChatServerWSHandler implements WebSocketHandler {
      */
     @Override
     public void handleTransportError(WebSocketSession session, Throwable exception) {
-        System.err.println("Transport error: " + exception.getMessage());
+        log.warn("Transport error on session {}: {}", session.getId(), exception.getMessage());
     }
 
     /**
@@ -194,7 +198,7 @@ public class ChatServerWSHandler implements WebSocketHandler {
         }
 
         joinedSessions.remove(session);
-        System.out.println("<<<---Connection closed from room: " + roomId);
+        log.debug("Connection {} closed from room {} ({})", session.getId(), roomId, closeStatus);
     }
 
     /**
