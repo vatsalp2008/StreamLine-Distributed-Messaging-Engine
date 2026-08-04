@@ -1,52 +1,138 @@
 # StreamLine: Distributed Messaging Engine
 
-StreamLine is a high-performance, distributed messaging system built with Java 21, Spring Boot, and WebSocket. It features asynchronous persistence, real-time message broadcasting, and robust validation.
+StreamLine is a high-throughput WebSocket messaging server built with Java 21 and Spring Boot,
+paired with two benchmark clients used to measure its throughput and tail latency.
 
 ## Architecture
-
-StreamLine uses a layered architecture to separate concerns and ensure scalability:
-
-- **WebSocket Layer**: Handles real-time connections using `ChatServerWSHandler`.
-- **Service Layer**: Manages business logic and asynchronous operations (`ChatService`).
-- **Persistence Layer**: Uses JPA and H2 (File-based) for durable storage without heavy infrastructure overhead (`MessageRepository`).
-
-**Key Architectural Decisions:**
-1. **Asynchronous Writes (`@Async`)**: Message persistence is decoupled from the WebSocket response loop. This ensures that database I/O never blocks the real-time chat experience.
-2. **Event Sourcing (Lite)**: When a user joins, the system replays the recent history of the room, providing context immediately.
-3. **Thread Safety**: Uses `ConcurrentHashMap` and `CopyOnWriteArrayList` to manage high-concurrency room sessions safely.
-
-## Features
-
-- **Real-time Communication**: Low-latency WebSocket messaging.
-- **Persistence**: Messages are saved to an embedded H2 database.
-- **History Replay**: automatic fetching of last 50 messages on join.
-- **Validation**: Strict server-side validation for all inputs.
-- **Metrics**: Built-in clients for measuring p99 latency and throughput.
-
-## Project Structure
 
 ```
 Server/
 ├── src/main/java/server/
-│   ├── configure/      # WebSocket Handlers & Config
-│   ├── model/          # Entities (ChatMessage)
-│   ├── repository/     # Data Access (MessageRepository)
-│   └── service/        # Business Logic (ChatService)
-├── pom.xml
-└── README.md
+│   ├── configure/      # WebSocket handler, async pool, HTTP status endpoints
+│   ├── model/          # ChatMessage entity
+│   ├── repository/     # MessageRepository (Spring Data JPA)
+│   └── service/        # ChatService (async, transactional persistence)
+├── src/test/java/      # Unit tests
+├── Dockerfile
+└── pom.xml
+
+load-tester/            # Throughput benchmark (warm-up + main phase)
+latency-analyzer/       # Per-message latency capture, writes CSV reports
 ```
 
-## Running the Server
+**Key design decisions**
 
-### 1. Build & Run
+1. **Writes are off the hot path.** `ChatService.saveMessage` is `@Async` and `@Transactional`,
+   so database I/O never blocks the WebSocket thread that is acknowledging a client.
+2. **The write pool is bounded.** Persistence runs on a dedicated pool with a fixed queue and a
+   caller-runs rejection policy, so traffic that outruns the database creates visible back
+   pressure instead of unbounded heap growth.
+3. **Room state is lock-free.** `ConcurrentHashMap` plus `CopyOnWriteArrayList` keeps room
+   membership safe under concurrent joins and leaves without a global lock.
+4. **History replay on join.** A joining client receives the room's last 50 messages before its
+   join acknowledgement, so it has context immediately.
+
+## Protocol
+
+Connect to `ws://<host>:8080/chat/{roomId}` and send JSON frames:
+
+```json
+{
+  "userId": 42,
+  "username": "alice",
+  "message": "hello",
+  "timestamp": "2026-08-04T10:00:00Z",
+  "messageType": "TEXT"
+}
+```
+
+| Field | Rules |
+| --- | --- |
+| `userId` | integer, 1–100000 |
+| `username` | 3–20 characters, alphanumeric only |
+| `message` | 1–500 characters |
+| `timestamp` | required, ISO-8601 |
+| `messageType` | `JOIN`, `TEXT`, or `LEAVE` |
+
+A client must `JOIN` before it may send `TEXT` or `LEAVE`. Every frame is answered with:
+
+```json
+{ "status": "OK", "serverTimestamp": "...", "message": "alice: hello" }
+```
+
+| `status` | Meaning |
+| --- | --- |
+| `OK` | Acknowledgement to the sender |
+| `BROADCAST` | A message from another member of the room |
+| `HISTORY` | A replayed past message, sent oldest first on join |
+| `ERROR` | Validation failure or protocol violation |
+
+## HTTP endpoints
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /health` | Liveness probe, returns `{"status":"RUNNING"}` |
+| `GET /stats` | Live room count, joined sessions, and per-room occupancy |
+
+## Running the server
+
 ```bash
 cd Server
-mvn clean spring-boot:run
+mvn spring-boot:run
 ```
 
-The server will start on port 8080 and create a local database file in `./data/streamline`.
+Or with Docker:
 
-### 2. Run Clients (Load Test)
-See `load-tester` and `latency-analyzer` loops for performance testing.
+```bash
+docker build -t streamline-server Server
+docker run -p 8080:8080 -v streamline-data:/app/data streamline-server
+```
 
-# StreamLine-Distributed-Messaging-Engine
+### Configuration
+
+Every setting has a working default; override through environment variables.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `SERVER_PORT` | `8080` | HTTP/WebSocket port |
+| `DB_URL` | `jdbc:h2:file:./data/streamline` | JDBC URL |
+| `DB_USERNAME` / `DB_PASSWORD` | `sa` / empty | Database credentials |
+| `DB_POOL_SIZE` | `32` | Hikari connection pool size |
+| `LOG_LEVEL` | `INFO` | Log level for `server.*` |
+| `BROADCAST_ENABLED` | `true` | Fan messages out to other room members |
+| `PERSIST_CORE_POOL` | `8` | Core persistence threads |
+| `PERSIST_MAX_POOL` | `32` | Max persistence threads |
+| `PERSIST_QUEUE_CAPACITY` | `10000` | Queued writes before back pressure |
+
+Set `BROADCAST_ENABLED=false` when benchmarking, so measured latency reflects only the
+sender's acknowledgement rather than fan-out traffic.
+
+## Running the benchmarks
+
+Both clients target `ws://localhost:8080` by default and take the same overrides:
+
+```bash
+cd load-tester
+mvn compile exec:java -Dexec.mainClass=client.WarmUpPhase \
+  -Dstreamline.url=ws://localhost:8080 \
+  -Dstreamline.threads=32 \
+  -Dstreamline.messages=32000
+```
+
+| Property | Environment variable | Default |
+| --- | --- | --- |
+| `streamline.url` | `STREAMLINE_URL` | `ws://localhost:8080` |
+| `streamline.threads` | `STREAMLINE_THREADS` | per client |
+| `streamline.messages` | `STREAMLINE_MESSAGES` | per client |
+| `streamline.rooms` | `STREAMLINE_ROOMS` | `20` |
+
+`latency-analyzer` additionally writes `Result/MessageMetrics.csv` and `Result/Throughput.csv`.
+
+## Tests
+
+```bash
+mvn -f Server/pom.xml verify
+```
+
+CI runs the server test suite, compiles both benchmark clients, and builds the Docker image on
+every push and pull request.
