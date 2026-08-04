@@ -7,7 +7,10 @@ import jakarta.validation.constraints.*;
  * Represents a chat message in the chat system
  */
 @Entity
-@Table(name = "messages")
+@Table(name = "messages", indexes = {
+        // history replay filters by room and orders by timestamp, so index both together
+        @Index(name = "idx_messages_room_timestamp", columnList = "room_id, timestamp")
+})
 public class ChatMessage {
 
     @Id
@@ -21,19 +24,24 @@ public class ChatMessage {
     @NotNull
     @Size(min = 3, max = 20)
     @Pattern(regexp = "^[a-zA-Z0-9]+$")
+    @Column(nullable = false, length = 20)
     private String username; // Username(3-20 ALPH characters)
 
     @NotNull
     @Size(min = 1, max = 500)
+    @Column(nullable = false, length = 500)
     private String message;
 
     @NotNull
+    @Column(nullable = false, length = 40)
     private String timestamp;
 
     @NotNull
     @Pattern(regexp = "TEXT|JOIN|LEAVE")
+    @Column(nullable = false, length = 10)
     private String messageType; // Type of message: TEXT, JOIN, or LEAVE
 
+    @Column(name = "room_id", length = 64)
     private String roomId;
 
     /**
