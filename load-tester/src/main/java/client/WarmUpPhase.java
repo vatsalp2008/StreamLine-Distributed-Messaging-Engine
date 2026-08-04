@@ -9,9 +9,9 @@ import java.util.concurrent.*;
 public class WarmUpPhase {
 
 
-    private static final String Server_Url = "ws://34.220.241.59:8080";
-    private static final int Threads = 32;
-    private static final int TotalMessages = 32000;
+    private static final String Server_Url = TestConfig.serverUrl();
+    private static final int Threads = TestConfig.threads(32);
+    private static final int TotalMessages = TestConfig.totalMessages(32000);
     private static final int ThreadMessages = TotalMessages/Threads;
 
     // Data variables

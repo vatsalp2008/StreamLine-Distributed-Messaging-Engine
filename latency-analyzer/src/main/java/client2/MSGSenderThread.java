@@ -40,7 +40,7 @@ public class MSGSenderThread implements Runnable {
         this.messagesToSend = messages;
         this.latch = latch;
         this.ThreadNumber = id;
-        this.roomId = (id % 20) + 1;
+        this.roomId = (id % TestConfig.rooms(20)) + 1;
         this.messageDataList = dataList;    }
 
     // Callbacks

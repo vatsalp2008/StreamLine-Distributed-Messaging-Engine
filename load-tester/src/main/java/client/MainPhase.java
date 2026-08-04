@@ -8,10 +8,10 @@ import java.util.concurrent.*;
  */
 public class MainPhase {
 
-    private static final String Server_Url = "ws://34.220.241.59:8080";
+    private static final String Server_Url = TestConfig.serverUrl();
 
-    private static final int Threads = 100;
-    private static final int TotalMessages = 500000;
+    private static final int Threads = TestConfig.threads(100);
+    private static final int TotalMessages = TestConfig.totalMessages(500000);
     private static final int ThreadMessages = TotalMessages/Threads;
 
     // Data variables
