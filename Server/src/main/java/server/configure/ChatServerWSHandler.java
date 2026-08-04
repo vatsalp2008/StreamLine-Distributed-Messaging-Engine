@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.*;
 import java.io.IOException;
+import java.net.URI;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -22,6 +23,12 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public class ChatServerWSHandler implements WebSocketHandler {
 
     private static final Logger log = LoggerFactory.getLogger(ChatServerWSHandler.class);
+
+    /** URI segment that precedes the room id, e.g. ws://host/chat/12 */
+    private static final String ROOM_PATH_PREFIX = "/chat/";
+
+    /** Fallback room used when the handshake URI carries no usable room id */
+    static final String UNKNOWN_ROOM = "unknown";
 
     private final ObjectMapper objectMapperMSG = new ObjectMapper();
     private final Validator validator;
@@ -210,9 +217,33 @@ public class ChatServerWSHandler implements WebSocketHandler {
     }
 
     /**
+     * Extracts the room id from the handshake URI.
+     * A malformed or missing path must never break the connection lifecycle,
+     * so anything unparseable is mapped to {@link #UNKNOWN_ROOM}.
+     *
      * @param session -WebSocketSession, Representing the Session
+     * @return -String, Representing the Room ID, never null
      */
     private String getRoomId(WebSocketSession session) {
-        return Objects.requireNonNull(session.getUri()).getPath().split("/chat/")[1];
+        URI uri = session.getUri();
+        if (uri == null || uri.getPath() == null) {
+            return UNKNOWN_ROOM;
+        }
+
+        String path = uri.getPath();
+        int start = path.indexOf(ROOM_PATH_PREFIX);
+        if (start < 0) {
+            return UNKNOWN_ROOM;
+        }
+
+        String roomId = path.substring(start + ROOM_PATH_PREFIX.length());
+
+        // keep only the first segment, so /chat/7/extra still resolves to room 7
+        int nextSegment = roomId.indexOf('/');
+        if (nextSegment >= 0) {
+            roomId = roomId.substring(0, nextSegment);
+        }
+
+        return roomId.isBlank() ? UNKNOWN_ROOM : roomId;
     }
 }
