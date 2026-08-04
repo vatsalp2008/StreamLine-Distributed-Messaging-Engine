@@ -161,6 +161,29 @@ public class ChatServerWSHandler implements WebSocketHandler {
     }
 
     /**
+     * @return the number of rooms that currently hold at least one joined session
+     */
+    public int getActiveRoomCount() {
+        return chatRooms.size();
+    }
+
+    /**
+     * @return the number of sessions that have completed a JOIN and not yet left
+     */
+    public int getJoinedSessionCount() {
+        return joinedSessions.size();
+    }
+
+    /**
+     * @return a point-in-time snapshot of room id to member count
+     */
+    public Map<String, Integer> getRoomOccupancy() {
+        Map<String, Integer> occupancy = new TreeMap<>();
+        chatRooms.forEach((roomId, sessions) -> occupancy.put(roomId, sessions.size()));
+        return occupancy;
+    }
+
+    /**
      * Fans a message out to every joined session in the room except the originator.
      * Delivery is best effort: one slow or dead peer must not fail the sender's write.
      *
