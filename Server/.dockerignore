@@ -1,0 +1,11 @@
+target/
+data/
+.git/
+.idea/
+.vscode/
+.mvn/
+mvnw
+mvnw.cmd
+*.log
+*.md
+.DS_Store
