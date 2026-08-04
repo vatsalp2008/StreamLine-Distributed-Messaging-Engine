@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import server.configure.AsyncConfig;
 import server.model.ChatMessage;
 import server.repository.MessageRepository;
 
@@ -31,7 +32,7 @@ public class ChatService {
      * @param roomId  -String, Representing the room the message belongs to
      * @return a future that completes once the write attempt has finished
      */
-    @Async
+    @Async(AsyncConfig.PERSISTENCE_EXECUTOR)
     @Transactional
     public CompletableFuture<Void> saveMessage(ChatMessage message, String roomId) {
         try {
