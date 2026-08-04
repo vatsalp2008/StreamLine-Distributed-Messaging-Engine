@@ -7,6 +7,7 @@ import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.*;
 import java.io.IOException;
@@ -40,9 +41,17 @@ public class ChatServerWSHandler implements WebSocketHandler {
     // set for session storing which are joined
     private final Set<WebSocketSession> joinedSessions = ConcurrentHashMap.newKeySet();
 
-    public ChatServerWSHandler(Validator validator, ChatService chatService) {
+    /**
+     * Fan-out is enabled by default. Load and latency benchmarks can turn it off
+     * (streamline.broadcast.enabled=false) so measurements only see the direct ack.
+     */
+    private final boolean broadcastEnabled;
+
+    public ChatServerWSHandler(Validator validator, ChatService chatService,
+            @Value("${streamline.broadcast.enabled:true}") boolean broadcastEnabled) {
         this.validator = validator;
         this.chatService = chatService;
+        this.broadcastEnabled = broadcastEnabled;
     }
 
     /**
@@ -81,9 +90,10 @@ public class ChatServerWSHandler implements WebSocketHandler {
             // method for getting formatted message to send in response
             String formattedMessage = chatMessageTypeProcess(session, roomId, chatMessage);
 
-            // echoback to sender from server
+            // echoback to sender from server, then fan out to everyone else in the room
             if (formattedMessage != null) {
                 sendResponse(session, "OK", formattedMessage);
+                broadcast(roomId, session, formattedMessage);
             }
 
         } catch (Exception e) {
@@ -151,8 +161,33 @@ public class ChatServerWSHandler implements WebSocketHandler {
     }
 
     /**
+     * Fans a message out to every joined session in the room except the originator.
+     * Delivery is best effort: one slow or dead peer must not fail the sender's write.
+     *
+     * @param roomId  -String, Representing the Room ID
+     * @param sender  -WebSocketSession, the session that produced the message
+     * @param message -String, Representing the already formatted chat line
+     */
+    private void broadcast(String roomId, WebSocketSession sender, String message) {
+        if (!broadcastEnabled) {
+            return;
+        }
+
+        CopyOnWriteArrayList<WebSocketSession> roomSessions = chatRooms.get(roomId);
+        if (roomSessions == null) {
+            return;
+        }
+
+        for (WebSocketSession peer : roomSessions) {
+            if (!peer.equals(sender)) {
+                sendResponse(peer, "BROADCAST", message);
+            }
+        }
+    }
+
+    /**
      * sending JSON response back to sender
-     * 
+     *
      * @param session -WebSocketSession, Representing the Session
      * @param status  -String, Representing the Status
      * @param message -String, Representing the msg
