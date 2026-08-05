@@ -54,6 +54,16 @@
                 <version>3.5.2</version>
             </plugin>
 
+            <!-- Run directly: mvn exec:java -Dexec.mainClass=client2.MainPhase -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.5.0</version>
+                <configuration>
+                    <mainClass>client2.MainPhase</mainClass>
+                </configuration>
+            </plugin>
+
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-assembly-plugin</artifactId>

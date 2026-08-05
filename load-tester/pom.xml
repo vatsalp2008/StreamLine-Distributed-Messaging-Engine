@@ -52,6 +52,16 @@
                 </configuration>
             </plugin>
 
+            <!-- Run a phase directly: mvn exec:java -Dexec.mainClass=client.MainPhase -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.5.0</version>
+                <configuration>
+                    <mainClass>client.WarmUpPhase</mainClass>
+                </configuration>
+            </plugin>
+
             <!-- Assembly plugin to create JAR with dependencies -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
