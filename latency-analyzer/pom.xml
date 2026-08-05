@@ -41,7 +41,7 @@
                 <configuration>
                     <archive>
                         <manifest>
-                            <mainClass>client.LoadTestClient</mainClass>
+                            <mainClass>client2.MainPhase</mainClass>
                         </manifest>
                     </archive>
                     <descriptorRefs>
