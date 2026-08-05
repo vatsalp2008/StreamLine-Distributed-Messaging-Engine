@@ -4,7 +4,6 @@ import client2.model.ChatMessage;
 import java.io.FileWriter;
 import java.io.PrintWriter;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.concurrent.*;
 
 /**
@@ -116,7 +115,8 @@ public class MainPhase {
 
     private static void dataAnalytics() {
         long totalTime = endTime - startTime;
-        double throughput = (successCount * 1000.0) / totalTime;
+        // a run that finishes inside the clock resolution would otherwise divide by zero
+        double throughput = totalTime > 0 ? (successCount * 1000.0) / totalTime : 0.0;
 
         System.out.println(" ------------ RESULTS ---------------");
         System.out.println("Successful: " + successCount);
@@ -126,41 +126,21 @@ public class MainPhase {
         System.out.println("Connections: " + connectionCount);
         System.out.println("Reconnections: " + reconnectCount);
 
-        // Calculating  statistics from latencies
         // Calculate statistics from message data
-        if (!allMessageData.isEmpty()) {
+        ArrayList<Long> latencies = new ArrayList<>();
+        for (int i = 0; i < allMessageData.size(); i++) {
+            latencies.add(allMessageData.get(i).latency);
+        }
 
-            // Extract latencies from MessageData objects
-            ArrayList<Long> latencies = new ArrayList<>();
-            for (int i = 0; i < allMessageData.size(); i++) {
-                latencies.add(allMessageData.get(i).latency);
-            }
-
-            // Sort for percentile calculations
-            Collections.sort(latencies);
-
-            // Calculate mean
-            long sum = 0;
-            for (int i = 0; i < latencies.size(); i++) {
-                sum += latencies.get(i);
-            }
-            double mean = (double) sum / latencies.size();
-
-            // Get values
-            int size = latencies.size();
-            long median = latencies.get(size / 2);
-            long p95 = latencies.get((int)(size * 0.95));
-            long p99 = latencies.get((int)(size * 0.99));
-            long min = latencies.get(0);
-            long max = latencies.get(size - 1);
-
+        LatencyStats stats = LatencyStats.of(latencies);
+        if (!stats.isEmpty()) {
             System.out.println("\n-------- Statistical Analysis ------");
-            System.out.println("  Mean: " + String.format("%.2f", mean) + " ms");
-            System.out.println("  Median: " + median + " ms");
-            System.out.println("  95th percentile: " + p95 + " ms");
-            System.out.println("  99th percentile: " + p99 + " ms");
-            System.out.println("  Min: " + min + " ms");
-            System.out.println("  Max: " + max + " ms");
+            System.out.println("  Mean: " + String.format("%.2f", stats.mean()) + " ms");
+            System.out.println("  Median: " + String.format("%.2f", stats.median()) + " ms");
+            System.out.println("  95th percentile: " + stats.percentile(95) + " ms");
+            System.out.println("  99th percentile: " + stats.percentile(99) + " ms");
+            System.out.println("  Min: " + stats.min() + " ms");
+            System.out.println("  Max: " + stats.max() + " ms");
         }
 
         //Genearting CSV File For timestamp, msgtypoe, latency, stauscode and roomID
