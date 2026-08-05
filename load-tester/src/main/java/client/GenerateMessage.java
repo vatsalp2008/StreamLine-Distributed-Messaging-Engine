@@ -8,7 +8,7 @@ import java.util.concurrent.BlockingQueue;
 /**
  * class MessageGenerator for Generating msg using threads
  */
-public class GenerateMessage extends MainPhase implements Runnable {
+public class GenerateMessage implements Runnable {
 
     private BlockingQueue<ChatMessage> queue;
     private int totalMessages;
