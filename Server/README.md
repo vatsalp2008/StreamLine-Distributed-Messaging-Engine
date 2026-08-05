@@ -1,139 +1,105 @@
-# WebSocket Chat Server
+# StreamLine Server
 
-CS6650 Assignment 1 - Server Implementation
+The WebSocket messaging server. For the protocol reference and configuration table, see the
+[root README](../README.md); this file covers building, running, and deploying the module.
 
 ## Overview
 
-This is a WebSocket server that handles real-time chat messages. It validates incoming messages and echoes them back to clients with server timestamps and status codes.
+Accepts WebSocket connections on `/chat/{roomId}`, validates each frame, acknowledges it to the
+sender, fans it out to the rest of the room, and persists it asynchronously to an embedded H2
+database. A joining client is replayed the room's recent history.
 
-## Features
-
-- WebSocket endpoint: `/chat/{roomId}`
-- Message validation (userId, username, message, timestamp, messageType)
-- Thread-safe connection handling
-- Support for multiple concurrent connections
-- Error handling and validation responses
-- Session management per room
-
-## Project Structure
+## Layout
 
 ```
 Server/
 ├── src/
-│   └── main/
-│       └── java/
-│           └── server/
-│               ├── configure/
-│               │   ├── ChatServerWSHandler.java    
-│               │   ├── ConfigureWebSocket.java    
-│               │   └── ServerStatus.java          
-│               └── model/
-│                   ├── ChatMessage.java            
-│                   └── ChatServer.java            
+│   ├── main/java/server/
+│   │   ├── ChatServer.java              # Spring Boot entry point
+│   │   ├── configure/
+│   │   │   ├── ChatServerWSHandler.java # Connection lifecycle and message routing
+│   │   │   ├── ConfigureWebSocket.java  # Endpoint registration and per-connection limits
+│   │   │   ├── AsyncConfig.java         # Bounded pool backing async persistence
+│   │   │   ├── MetricsConfig.java       # Room gauges published to Actuator
+│   │   │   └── ServerStatus.java        # /health and /stats
+│   │   ├── model/ChatMessage.java       # Validated JPA entity
+│   │   ├── repository/MessageRepository.java
+│   │   └── service/ChatService.java     # Async, transactional persistence
+│   └── test/java/server/                # Unit and end-to-end tests
+├── Dockerfile
 ├── pom.xml
 └── README.md
 ```
 
-## Building the Server
-
-### Option 1: Build JAR file
+## Build and run
 
 ```bash
-# Navigate to Server directory
-cd Server
-
-# Clean and build
-mvn clean package
-
-# JAR file will be created at: target/Server-0.0.1-SNAPSHOT.jar
+mvn spring-boot:run                 # run locally on port 8080
+mvn clean package                   # build target/streamline-server-0.0.1-SNAPSHOT.jar
+mvn verify                          # compile and run the full test suite
+java -jar target/streamline-server-0.0.1-SNAPSHOT.jar
 ```
 
-## Deployment on AWS EC2
+Java 21 or newer is required.
 
-### Step 1: Connect to EC2
+### Docker
 
 ```bash
-# Set permissions for your key file
-chmod 400 /path/to/your-key.pem
-
-# SSH into EC2
-ssh -i /path/to/your-key.pem ec2-user@your-ec2-public-ip
+docker build -t streamline-server .
+docker run -p 8080:8080 -v streamline-data:/app/data streamline-server
 ```
 
-### Step 2: Upload Server JAR
+The image runs as an unprivileged user and keeps the H2 file on the `/app/data` volume, so
+messages survive container restarts.
 
-From your **local machine** (not EC2):
+## Endpoints
 
-```bash
-# Upload JAR file to EC2
-scp -i /path/to/your-key.pem target/Server-0.0.1-SNAPSHOT.jar ec2-user@your-ec2-public-dns:~/
+| Endpoint | Purpose |
+| --- | --- |
+| `ws://<host>:8080/chat/{roomId}` | Chat connection |
+| `GET /health` | Liveness probe |
+| `GET /stats` | Active rooms, joined sessions, per-room occupancy |
+| `GET /actuator/health` | Actuator health |
+| `GET /actuator/metrics` | JVM, HTTP, and `streamline.rooms.active` / `streamline.sessions.joined` |
 
-# Example:
-scp -i ~/.ssh/cs6650-key.pem target/Server-0.0.1-SNAPSHOT.jar ec2-user@ec2-52-12-34-56.us-west-2.compute.amazonaws.com:~/
-```
+## Validation rules
 
-### Step 3: Run the Server
-
-## Server Configuration
-
-The server runs on **port 8080** by default.
-
-WebSocket endpoint: `ws://your-server-address:8080/chat/{roomId}`
-
-## Message Format
-
-### Client → Server (Request)
-
-```json
-{
-  "userId": "12345",
-  "username": "user1223",
-  "message": "Hey JSK!",
-  "timestamp": "2025-10-15T14:30:00Z",
-  "messageType": "JOIN"
-}
-```
-```
-
-## Validation Rules
-
-The server validates all incoming messages:
+Every field is rejected server-side if it does not match:
 
 | Field | Rule |
 |-------|------|
-| userId | Must be between 1 and 100,000 |
-| username | Must be 3-20 alphanumeric characters |
-| message | Must be 1-500 characters |
-| timestamp | Must be valid ISO-8601 format |
-| messageType | Must be TEXT, JOIN, or LEAVE |
+| userId | Between 1 and 100,000 |
+| username | 3-20 alphanumeric characters |
+| message | 1-500 characters |
+| timestamp | Required, ISO-8601 |
+| messageType | `TEXT`, `JOIN`, or `LEAVE` |
 
-If validation fails, server responds with error status.
+A validation failure returns `{"status":"ERROR", ...}` and leaves the connection open.
 
-## Testing the Server
-
-### Test with wscat (WebSocket client)
+## Manual testing
 
 ```bash
-# Install wscat
 npm install -g wscat
+wscat -c ws://localhost:8080/chat/1
 
-# Connect to server
-wscat -c ws://your-ec2-dns:8080/chat/1
-
-# Join the room 
-{"userId":"1","username":"testuser","message":"Hello","timestamp":"2025-10-15T14:30:00Z","messageType":"JOIN"}
-
-# Send a test message
-{"userId":"1","username":"testuser","message":"Hello","timestamp":"2025-10-15T14:30:00Z","messageType":"TEXT"}
+# JOIN first; TEXT before JOIN is refused
+{"userId":1,"username":"testuser","message":"Hello","timestamp":"2026-08-05T14:30:00Z","messageType":"JOIN"}
+{"userId":1,"username":"testuser","message":"Hello","timestamp":"2026-08-05T14:30:00Z","messageType":"TEXT"}
 ```
 
-- **ChatServer.java** - Main entry point, starts the server
-- **ChatServerWSHandler.java** - Handles WebSocket lifecycle (onOpen, onMessage, onClose, onError)
-- **ConfigureWebSocket.java** - Configures WebSocket endpoints
-- **Validator** - Validates message format and fields
-- **ChatMessage.java** - Data model for messages
-- **ServerStatus.java** - Response object with status and timestamp
+Open a second `wscat` against the same room to watch messages arrive as `BROADCAST`.
 
+## Deploying to EC2
 
+```bash
+chmod 400 /path/to/your-key.pem
+scp -i /path/to/your-key.pem \
+  target/streamline-server-0.0.1-SNAPSHOT.jar ec2-user@<public-dns>:~/
+ssh -i /path/to/your-key.pem ec2-user@<public-dns>
 
+# on the instance
+nohup java -jar streamline-server-0.0.1-SNAPSHOT.jar > streamline.log 2>&1 &
+```
 
+Open port 8080 in the instance security group, and set `DB_PASSWORD` in the environment rather
+than relying on the empty default.
