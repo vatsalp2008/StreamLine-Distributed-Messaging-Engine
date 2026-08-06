@@ -42,6 +42,13 @@ public final class TestConfig {
         return positiveInt("streamline.rooms", "STREAMLINE_ROOMS", fallback);
     }
 
+    /**
+     * @return -String, Representing the directory the CSV reports are written to
+     */
+    public static String resultDir() {
+        return string("streamline.result.dir", "STREAMLINE_RESULT_DIR", "Result");
+    }
+
     private static String string(String property, String envVar, String fallback) {
         String value = System.getProperty(property);
         if (value == null || value.isBlank()) {

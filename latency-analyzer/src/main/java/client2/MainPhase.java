@@ -1,8 +1,8 @@
 package client2;
 
 import client2.model.ChatMessage;
-import java.io.FileWriter;
-import java.io.PrintWriter;
+import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.LongAdder;
@@ -148,91 +148,19 @@ public class MainPhase {
             System.out.println("  Max: " + stats.max() + " ms");
         }
 
-        //Genearting CSV File For timestamp, msgtypoe, latency, stauscode and roomID
-        writeCSV();
-        throughputChartCSV();
+        writeReports();
     }
 
     /**
-     * CSV File For timestamp, msgtypoe, latency, stauscode and roomID
+     * Writes both CSV reports, reporting a failure rather than aborting the run.
      */
-    private static void writeCSV() {
+    private static void writeReports() {
+        CsvReportWriter reports = new CsvReportWriter(Path.of(TestConfig.resultDir()));
         try {
-            java.io.File dir = new java.io.File("Result");
-            if (!dir.exists()) {
-                dir.mkdir();
-            }
-
-            PrintWriter writer = new PrintWriter(new FileWriter("Result/MessageMetrics.csv"));
-
-            // Header
-            writer.println("timestamp,messageType,latency,statusCode,roomId");
-
-            // Data
-            for (int i = 0; i < allMessageData.size(); i++) {
-                writer.println(allMessageData.get(i).toCsvRow());
-            }
-            writer.close();
-        } catch (Exception e) {
-            System.err.println("Eroor while Creating CSV: " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
-
-    private static void throughputChartCSV() {
-
-        if (allMessageData.isEmpty()) {
-            System.out.println("NO Data --");
-            return;
-        }
-
-        try {
-            // Find first and last message time
-            long firstTime = allMessageData.get(0).getTimestamp();
-            long lastTime = allMessageData.get(0).getTimestamp();
-
-            for (int i = 0; i < allMessageData.size(); i++) {
-                long timestamp = allMessageData.get(i).getTimestamp();
-                if (timestamp < firstTime) firstTime = timestamp;
-                if (timestamp > lastTime) lastTime = timestamp;
-            }
-
-            // Calculating how many 10 second buckets
-            long totalSeconds = (lastTime - firstTime) / 1000;
-            int numBuckets = (int)(totalSeconds / 10) + 1;
-
-            // Counting messages in each bucket
-            int[] bucketCounts = new int[numBuckets];
-
-            for (int i = 0; i < allMessageData.size(); i++) {
-                long elapsed = allMessageData.get(i).getTimestamp() - firstTime;
-                int bucketNum = (int)(elapsed / 10000);
-
-                if (bucketNum >= 0 && bucketNum < numBuckets) {
-                    bucketCounts[bucketNum]++;
-                }
-            }
-
-            java.io.File dir = new java.io.File("Result");
-            if (!dir.exists()) {
-                dir.mkdir();
-            }
-
-            PrintWriter writer = new PrintWriter(new FileWriter("Result/Throughput.csv"));
-            writer.println("Time_Seconds,Messages_Per_Second");
-
-            for (int i = 0; i < numBuckets; i++) {
-                int timeInSeconds = i * 10;
-                double messagesPerSec = bucketCounts[i] / 10.0;
-
-                if (bucketCounts[i] > 0) {
-                    writer.println(timeInSeconds + "," + messagesPerSec);
-                }
-            }
-
-            writer.close();
-        } catch (Exception e) {
-            System.err.println("Error creating throughput CSV: " + e.getMessage());
+            reports.writeMetrics(allMessageData);
+            reports.writeThroughput(allMessageData);
+        } catch (IOException e) {
+            System.err.println("Error writing CSV reports: " + e.getMessage());
         }
     }
 }
