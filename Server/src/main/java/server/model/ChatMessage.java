@@ -3,6 +3,8 @@ package server.model;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.*;
 
+import java.time.Instant;
+
 /**
  * Represents a chat message in the chat system
  */
@@ -32,9 +34,15 @@ public class ChatMessage {
     @Column(nullable = false, length = 500)
     private String message;
 
+    /**
+     * When the client produced the message.
+     * Stored as an instant rather than text: string ordering only matches
+     * chronological order for zero-padded UTC values, so a client sending an
+     * offset such as +05:30 would sort into the wrong place in room history.
+     */
     @NotNull
-    @Column(nullable = false, length = 40)
-    private String timestamp;
+    @Column(nullable = false)
+    private Instant timestamp;
 
     @NotNull
     @Pattern(regexp = "TEXT|JOIN|LEAVE")
@@ -89,14 +97,14 @@ public class ChatMessage {
     /**
      * @return timestamp, gives TimeStamp
      */
-    public String getTimestamp() {
+    public Instant getTimestamp() {
         return timestamp;
     }
 
     /**
      * @param timestamp, set the timestamp
      */
-    public void setTimestamp(String timestamp) {
+    public void setTimestamp(Instant timestamp) {
         this.timestamp = timestamp;
     }
 

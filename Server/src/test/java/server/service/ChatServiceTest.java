@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import server.model.ChatMessage;
 import server.repository.MessageRepository;
 
+import java.time.Instant;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -30,7 +31,7 @@ class ChatServiceTest {
         msg.setUserId(42);
         msg.setUsername("alice");
         msg.setMessage(text);
-        msg.setTimestamp("2026-08-04T10:00:00Z");
+        msg.setTimestamp(Instant.parse("2026-08-04T10:00:00Z"));
         msg.setMessageType(type);
         return msg;
     }
