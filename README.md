@@ -8,11 +8,14 @@ paired with two benchmark clients used to measure its throughput and tail latenc
 ```
 Server/
 ├── src/main/java/server/
-│   ├── configure/      # WebSocket handler, async pool, HTTP status endpoints
+│   ├── api/            # REST controller, response records, error handling
+│   ├── configure/      # WebSocket handler, rate limiter, async pool, probes
 │   ├── model/          # ChatMessage entity
 │   ├── repository/     # MessageRepository (Spring Data JPA)
 │   └── service/        # ChatService (async, transactional persistence)
-├── src/test/java/      # Unit tests
+├── src/main/resources/
+│   └── static/         # Browser chat client
+├── src/test/java/      # Unit and integration tests
 ├── Dockerfile
 └── pom.xml
 
@@ -31,6 +34,9 @@ latency-analyzer/       # Per-message latency capture, writes CSV reports
    membership safe under concurrent joins and leaves without a global lock.
 4. **History replay on join.** A joining client receives the room's last 50 messages before its
    join acknowledgement, so it has context immediately.
+5. **Only chat text is durable.** `JOIN` and `LEAVE` are connection control frames, so they are
+   not stored: persisting them replayed "alice: Joining" back as room history, and they are
+   roughly 10% of benchmark traffic.
 
 ## Protocol
 
@@ -67,12 +73,54 @@ A client must `JOIN` before it may send `TEXT` or `LEAVE`. Every frame is answer
 | `HISTORY` | A replayed past message, sent oldest first on join |
 | `ERROR` | Validation failure or protocol violation |
 
+## Browser client
+
+Open `http://localhost:8080/` once the server is running. The bundled client
+joins a room, streams messages live, and shows each frame's status, so the
+server can be exercised without any extra tooling.
+
 ## HTTP endpoints
 
 | Endpoint | Purpose |
 | --- | --- |
-| `GET /health` | Liveness probe, returns `{"status":"RUNNING"}` |
+| `GET /` | Browser chat client |
+| `GET /health` | Liveness probe; does no I/O, returns `{"status":"RUNNING"}` |
+| `GET /ready` | Readiness probe; checks the database, 503 when not ready |
 | `GET /stats` | Live room count, joined sessions, and per-room occupancy |
+| `GET /api/rooms` | Rooms with at least one member, with stored message counts |
+| `GET /api/rooms/{roomId}/messages` | Paginated room history, newest first |
+
+Use `/health` for liveness and `/ready` for load-balancer routing: a server whose
+database is unreachable is still alive but cannot persist anything, so only
+`/ready` reports it as unavailable.
+
+### Reading history
+
+```bash
+curl 'http://localhost:8080/api/rooms/1/messages?page=0&size=25'
+```
+
+```json
+{
+  "roomId": "1",
+  "messages": [
+    { "username": "alice", "message": "hello", "timestamp": "2026-08-06T10:00:00Z", "roomId": "1" }
+  ],
+  "page": 0,
+  "size": 25,
+  "totalMessages": 96,
+  "totalPages": 4,
+  "hasMore": true
+}
+```
+
+`size` is clamped to 1..200 rather than rejected. Failures return a consistent
+body:
+
+```json
+{ "status": 400, "error": "Bad Request", "message": "page must not be negative, got -1",
+  "timestamp": "2026-08-06T10:00:00Z" }
+```
 
 ## Running the server
 
@@ -103,6 +151,15 @@ Every setting has a working default; override through environment variables.
 | `PERSIST_CORE_POOL` | `8` | Core persistence threads |
 | `PERSIST_MAX_POOL` | `32` | Max persistence threads |
 | `PERSIST_QUEUE_CAPACITY` | `10000` | Queued writes before back pressure |
+| `RATE_LIMIT_ENABLED` | `false` | Per-session send limiting |
+| `RATE_LIMIT_PER_SECOND` | `20` | Sustained messages per second per session |
+| `RATE_LIMIT_BURST` | `40` | How far a session may burst above that rate |
+| `WS_ALLOWED_ORIGINS` | `*` | Comma-separated origins allowed to connect |
+| `WS_MAX_TEXT_BYTES` | `8192` | Maximum inbound text frame size |
+| `WS_MAX_BINARY_BYTES` | `8192` | Maximum inbound binary frame size |
+
+Set `SPRING_PROFILES_ACTIVE=json` to emit one ECS JSON object per log line
+instead of human-readable console output.
 
 Set `BROADCAST_ENABLED=false` when benchmarking, so measured latency reflects only the
 sender's acknowledgement rather than fan-out traffic.
@@ -128,11 +185,20 @@ mvn compile exec:java -Dexec.mainClass=client.WarmUpPhase \
 
 `latency-analyzer` additionally writes `Result/MessageMetrics.csv` and `Result/Throughput.csv`.
 
-## Tests
+## Development
 
 ```bash
-mvn -f Server/pom.xml verify
+make help      # list every task
+make verify    # every module, clean, with tests
+make run       # server on :8080 with the browser client at /
+make bench     # throughput benchmark against a running server
 ```
 
-CI runs the server test suite, compiles both benchmark clients, and builds the Docker image on
-every push and pull request.
+Always build with `clean`; see `CONTRIBUTING.md` for why.
+
+```bash
+mvn -f Server/pom.xml clean verify
+```
+
+CI runs every module's tests from a clean build and builds the Docker image on each push and
+pull request.
