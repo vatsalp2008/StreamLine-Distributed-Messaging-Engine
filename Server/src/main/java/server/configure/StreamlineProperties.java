@@ -15,9 +15,14 @@ public class StreamlineProperties {
     private final Broadcast broadcast = new Broadcast();
     private final Persistence persistence = new Persistence();
     private final Ws ws = new Ws();
+    private final RateLimit rateLimit = new RateLimit();
 
     public Broadcast getBroadcast() {
         return broadcast;
+    }
+
+    public RateLimit getRateLimit() {
+        return rateLimit;
     }
 
     public Persistence getPersistence() {
@@ -39,6 +44,42 @@ public class StreamlineProperties {
 
         public void setEnabled(boolean enabled) {
             this.enabled = enabled;
+        }
+    }
+
+    /** Per-session send rate limit. */
+    public static class RateLimit {
+        /** Off by default so existing benchmarks are unaffected. */
+        private boolean enabled = false;
+
+        /** Sustained messages per second allowed per session. */
+        private double messagesPerSecond = 20.0;
+
+        /** How far a session may burst above the sustained rate. */
+        private int burstSize = 40;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public double getMessagesPerSecond() {
+            return messagesPerSecond;
+        }
+
+        public void setMessagesPerSecond(double messagesPerSecond) {
+            this.messagesPerSecond = messagesPerSecond;
+        }
+
+        public int getBurstSize() {
+            return burstSize;
+        }
+
+        public void setBurstSize(int burstSize) {
+            this.burstSize = burstSize;
         }
     }
 

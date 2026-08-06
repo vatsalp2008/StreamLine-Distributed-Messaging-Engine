@@ -51,23 +51,36 @@ public class ChatServerWSHandler implements WebSocketHandler {
      */
     private final boolean broadcastEnabled;
 
+    /** Per-session send limits; empty when rate limiting is disabled. */
+    private final StreamlineProperties.RateLimit rateLimitSettings;
+    private final ConcurrentHashMap<String, RateLimiter> rateLimiters = new ConcurrentHashMap<>();
+
     @org.springframework.beans.factory.annotation.Autowired
     public ChatServerWSHandler(Validator validator, ChatService chatService,
             StreamlineProperties properties, ObjectMapper objectMapper) {
-        this(validator, chatService, properties.getBroadcast().isEnabled(), objectMapper);
+        this(validator, chatService, properties.getBroadcast().isEnabled(), objectMapper,
+                properties.getRateLimit());
     }
 
     /** Direct constructor, used by tests that do not need a properties object. */
     ChatServerWSHandler(Validator validator, ChatService chatService, boolean broadcastEnabled) {
-        this(validator, chatService, broadcastEnabled, defaultObjectMapper());
+        this(validator, chatService, broadcastEnabled, defaultObjectMapper(),
+                new StreamlineProperties.RateLimit());
     }
 
     ChatServerWSHandler(Validator validator, ChatService chatService, boolean broadcastEnabled,
             ObjectMapper objectMapper) {
+        this(validator, chatService, broadcastEnabled, objectMapper,
+                new StreamlineProperties.RateLimit());
+    }
+
+    ChatServerWSHandler(Validator validator, ChatService chatService, boolean broadcastEnabled,
+            ObjectMapper objectMapper, StreamlineProperties.RateLimit rateLimitSettings) {
         this.validator = validator;
         this.chatService = chatService;
         this.broadcastEnabled = broadcastEnabled;
         this.objectMapperMSG = objectMapper;
+        this.rateLimitSettings = rateLimitSettings;
     }
 
     /**
@@ -97,6 +110,12 @@ public class ChatServerWSHandler implements WebSocketHandler {
      */
     @Override
     public void handleMessage(WebSocketSession session, WebSocketMessage<?> message) throws IOException {
+        // Checked before parsing, so a flood costs as little work as possible.
+        if (!allowedByRateLimit(session)) {
+            sendResponse(session, "ERROR", "Rate limit exceeded, slow down");
+            return;
+        }
+
         try {
             // JSON Paylod parshing into ChatMessage object
             ChatMessage chatMessage = objectMapperMSG.readValue(
@@ -218,6 +237,22 @@ public class ChatServerWSHandler implements WebSocketHandler {
     }
 
     /**
+     * @param session -WebSocketSession, the sender being metered
+     * @return true when the session may send another message right now
+     */
+    private boolean allowedByRateLimit(WebSocketSession session) {
+        if (!rateLimitSettings.isEnabled()) {
+            return true;
+        }
+
+        RateLimiter limiter = rateLimiters.computeIfAbsent(session.getId(),
+                id -> new RateLimiter(rateLimitSettings.getMessagesPerSecond(),
+                        rateLimitSettings.getBurstSize()));
+
+        return limiter.tryAcquire();
+    }
+
+    /**
      * Fans a message out to every joined session in the room except the originator.
      * Delivery is best effort: one slow or dead peer must not fail the sender's write.
      *
@@ -297,6 +332,10 @@ public class ChatServerWSHandler implements WebSocketHandler {
         }
 
         joinedSessions.remove(session);
+        // buckets are keyed by session id, so drop this one or the map grows forever
+        if (session.getId() != null) {
+            rateLimiters.remove(session.getId());
+        }
         log.debug("Connection {} closed from room {} ({})", session.getId(), roomId, closeStatus);
     }
 
