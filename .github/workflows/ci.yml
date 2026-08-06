@@ -53,8 +53,8 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-      - name: Compile ${{ matrix.module }}
-        run: mvn -B compile --file ${{ matrix.module }}/pom.xml
+      - name: Build and test ${{ matrix.module }}
+        run: mvn -B verify --file ${{ matrix.module }}/pom.xml
 
   docker:
     name: Docker image builds

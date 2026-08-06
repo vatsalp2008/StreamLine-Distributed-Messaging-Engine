@@ -1,0 +1,40 @@
+version: 2
+updates:
+  # One entry per Maven module, since each has its own pom.
+  - package-ecosystem: maven
+    directory: "/Server"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # Spring Boot artifacts move in lockstep, so one PR rather than a dozen
+      spring-boot:
+        patterns:
+          - "org.springframework.boot:*"
+
+  - package-ecosystem: maven
+    directory: "/load-tester"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+
+  - package-ecosystem: maven
+    directory: "/latency-analyzer"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker
+    directory: "/Server"
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker
+    directory: "/load-tester"
+    schedule:
+      interval: weekly
