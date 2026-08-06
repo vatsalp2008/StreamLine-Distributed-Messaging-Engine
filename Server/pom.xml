@@ -51,6 +51,12 @@
 			<scope>runtime</scope>
 		</dependency>
 
+		<!-- Health, metrics and diagnostics endpoints -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+
 		<!-- Serves the OpenAPI document and Swagger UI for the REST API -->
 		<dependency>
 			<groupId>org.springdoc</groupId>
