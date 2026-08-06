@@ -79,6 +79,23 @@ public class ChatApiController {
      * @param page   zero-based page number
      * @param size   messages per page, clamped to 1..MAX_PAGE_SIZE
      */
+    @Operation(summary = "Describe one room",
+            description = "Members present, open session count and stored message total. "
+                    + "A room nobody has joined reports zero members rather than 404, so a "
+                    + "client can poll a room before anyone arrives.")
+    @ApiResponse(responseCode = "200", description = "The room's current state")
+    @GetMapping("/rooms/{roomId}")
+    public ResponseEntity<RoomDetail> room(
+            @Parameter(description = "Room identifier used in the WebSocket path")
+            @PathVariable String roomId) {
+
+        List<String> members = handler.getRoomMembers(roomId);
+        int sessions = handler.getRoomOccupancy().getOrDefault(roomId, 0);
+
+        return ResponseEntity.ok(new RoomDetail(
+                roomId, members, sessions, chatService.countMessages(roomId)));
+    }
+
     @Operation(summary = "Read room history",
             description = "Messages for a room, newest first. An unknown room returns an "
                     + "empty page rather than a 404, so polling a room that has not been "
