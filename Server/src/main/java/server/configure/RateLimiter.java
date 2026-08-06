@@ -1,5 +1,7 @@
 package server.configure;
 
+import java.util.function.LongSupplier;
+
 /**
  * Token bucket limiting how fast one session may send messages.
  *
@@ -18,6 +20,7 @@ public final class RateLimiter {
 
     private final double permitsPerSecond;
     private final double burstSize;
+    private final LongSupplier nanoClock;
 
     private double availableTokens;
     private long lastRefillNanos;
@@ -27,6 +30,14 @@ public final class RateLimiter {
      * @param burstSize        maximum tokens the bucket holds, must be positive
      */
     public RateLimiter(double permitsPerSecond, int burstSize) {
+        this(permitsPerSecond, burstSize, System::nanoTime);
+    }
+
+    /**
+     * @param nanoClock source of monotonic time; tests supply their own so they
+     *                  can exercise refill behaviour without sleeping
+     */
+    public RateLimiter(double permitsPerSecond, int burstSize, LongSupplier nanoClock) {
         if (permitsPerSecond <= 0) {
             throw new IllegalArgumentException("permitsPerSecond must be positive");
         }
@@ -36,8 +47,9 @@ public final class RateLimiter {
 
         this.permitsPerSecond = permitsPerSecond;
         this.burstSize = burstSize;
+        this.nanoClock = nanoClock;
         this.availableTokens = burstSize;
-        this.lastRefillNanos = nanoTime();
+        this.lastRefillNanos = nanoClock.getAsLong();
     }
 
     /**
@@ -63,7 +75,7 @@ public final class RateLimiter {
     }
 
     private void refill() {
-        long now = nanoTime();
+        long now = nanoClock.getAsLong();
         long elapsed = now - lastRefillNanos;
         if (elapsed <= 0) {
             return;
@@ -72,10 +84,5 @@ public final class RateLimiter {
         double refilled = (elapsed / (double) NANOS_PER_SECOND) * permitsPerSecond;
         availableTokens = Math.min(burstSize, availableTokens + refilled);
         lastRefillNanos = now;
-    }
-
-    /** Overridable so tests can drive time instead of sleeping. */
-    long nanoTime() {
-        return System.nanoTime();
     }
 }
