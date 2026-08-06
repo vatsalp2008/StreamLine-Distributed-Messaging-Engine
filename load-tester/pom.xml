@@ -17,6 +17,13 @@
 
     <!-- ADD THIS: Dependencies section -->
     <dependencies>
+        <!-- Message model, config, backoff and generator shared with latency-analyzer -->
+        <dependency>
+            <groupId>com.streamline</groupId>
+            <artifactId>streamline-bench-common</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+
         <!-- WebSocket client library -->
         <dependency>
             <groupId>org.java-websocket</groupId>

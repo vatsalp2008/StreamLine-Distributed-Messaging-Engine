@@ -1,5 +1,7 @@
 package client;
 
+import bench.TestConfig;
+
 /**
  * Class MainPhase for the full-load throughput test.
  */

@@ -1,7 +1,7 @@
 package client;
 
-import client.model.ChatMessage;
-
+import bench.GenerateMessage;
+import bench.model.ChatMessage;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.LongAdder;
 

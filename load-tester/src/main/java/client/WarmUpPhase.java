@@ -1,5 +1,7 @@
 package client;
 
+import bench.TestConfig;
+
 /**
  * Class WarmUpPhase, a smaller run used to warm the server before the main phase.
  */
