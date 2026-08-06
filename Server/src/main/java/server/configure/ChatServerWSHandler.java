@@ -53,34 +53,42 @@ public class ChatServerWSHandler implements WebSocketHandler {
 
     /** Per-session send limits; empty when rate limiting is disabled. */
     private final StreamlineProperties.RateLimit rateLimitSettings;
+    private final ChatMetrics metrics;
     private final ConcurrentHashMap<String, RateLimiter> rateLimiters = new ConcurrentHashMap<>();
 
     @org.springframework.beans.factory.annotation.Autowired
     public ChatServerWSHandler(Validator validator, ChatService chatService,
-            StreamlineProperties properties, ObjectMapper objectMapper) {
+            StreamlineProperties properties, ObjectMapper objectMapper, ChatMetrics metrics) {
         this(validator, chatService, properties.getBroadcast().isEnabled(), objectMapper,
-                properties.getRateLimit());
+                properties.getRateLimit(), metrics);
     }
 
     /** Direct constructor, used by tests that do not need a properties object. */
     ChatServerWSHandler(Validator validator, ChatService chatService, boolean broadcastEnabled) {
         this(validator, chatService, broadcastEnabled, defaultObjectMapper(),
-                new StreamlineProperties.RateLimit());
+                new StreamlineProperties.RateLimit(), noOpMetrics());
     }
 
     ChatServerWSHandler(Validator validator, ChatService chatService, boolean broadcastEnabled,
             ObjectMapper objectMapper) {
         this(validator, chatService, broadcastEnabled, objectMapper,
-                new StreamlineProperties.RateLimit());
+                new StreamlineProperties.RateLimit(), noOpMetrics());
     }
 
     ChatServerWSHandler(Validator validator, ChatService chatService, boolean broadcastEnabled,
-            ObjectMapper objectMapper, StreamlineProperties.RateLimit rateLimitSettings) {
+            ObjectMapper objectMapper, StreamlineProperties.RateLimit rateLimitSettings,
+            ChatMetrics metrics) {
         this.validator = validator;
         this.chatService = chatService;
         this.broadcastEnabled = broadcastEnabled;
         this.objectMapperMSG = objectMapper;
         this.rateLimitSettings = rateLimitSettings;
+        this.metrics = metrics;
+    }
+
+    /** Metrics sink for handlers built outside Spring, backed by a throwaway registry. */
+    private static ChatMetrics noOpMetrics() {
+        return new ChatMetrics(new io.micrometer.core.instrument.simple.SimpleMeterRegistry());
     }
 
     /**
@@ -112,6 +120,7 @@ public class ChatServerWSHandler implements WebSocketHandler {
     public void handleMessage(WebSocketSession session, WebSocketMessage<?> message) throws IOException {
         // Checked before parsing, so a flood costs as little work as possible.
         if (!allowedByRateLimit(session)) {
+            metrics.recordRateLimited();
             sendResponse(session, "ERROR", "Rate limit exceeded, slow down");
             return;
         }
@@ -124,6 +133,7 @@ public class ChatServerWSHandler implements WebSocketHandler {
             // Validate message using annotations
             Set<ConstraintViolation<ChatMessage>> violations = validator.validate(chatMessage);
             if (!violations.isEmpty()) {
+                metrics.recordRejected();
                 sendResponse(session, "ERROR",
                         "Validation failed: " + violations.iterator().next().getMessage());
                 return;
@@ -145,11 +155,16 @@ public class ChatServerWSHandler implements WebSocketHandler {
 
             // echoback to sender from server, then fan out to everyone else in the room
             if (formattedMessage != null) {
+                metrics.recordAccepted();
                 sendResponse(session, "OK", formattedMessage);
                 broadcast(roomId, session, formattedMessage);
+            } else {
+                // the type handler already answered with an ERROR
+                metrics.recordRejected();
             }
 
         } catch (Exception e) {
+            metrics.recordRejected();
             sendResponse(session, "ERROR", "Error parsing message: " + e.getMessage());
         }
     }
@@ -270,11 +285,14 @@ public class ChatServerWSHandler implements WebSocketHandler {
             return;
         }
 
+        int recipients = 0;
         for (WebSocketSession peer : roomSessions) {
             if (!peer.equals(sender)) {
                 sendResponse(peer, "BROADCAST", message);
+                recipients++;
             }
         }
+        metrics.recordBroadcast(recipients);
     }
 
     /**

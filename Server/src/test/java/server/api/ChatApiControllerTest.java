@@ -14,7 +14,10 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import server.configure.ChatServerWSHandler;
+import server.configure.ChatMetrics;
 import server.configure.StreamlineProperties;
+
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import server.model.ChatMessage;
 import server.service.ChatService;
 
@@ -48,7 +51,8 @@ class ChatApiControllerTest {
         Validator validator = Validation.buildDefaultValidatorFactory().getValidator();
         chatService = mock(ChatService.class);
         handler = new ChatServerWSHandler(validator, mock(ChatService.class),
-                new StreamlineProperties(), JsonMapper.builder().addModule(new JavaTimeModule()).build());
+                new StreamlineProperties(), JsonMapper.builder().addModule(new JavaTimeModule()).build(),
+                new ChatMetrics(new SimpleMeterRegistry()));
 
         ObjectMapper mapper = JsonMapper.builder().addModule(new JavaTimeModule()).build();
         MappingJackson2HttpMessageConverter converter = new MappingJackson2HttpMessageConverter(mapper);
