@@ -56,6 +56,7 @@
   #status { margin-left: auto; color: var(--muted); font-size: 13px; }
   #status.live { color: var(--ok); }
   #status.down { color: var(--error); }
+  #main { flex: 1; display: flex; min-height: 0; }
   #log {
     flex: 1;
     overflow-y: auto;
@@ -64,6 +65,33 @@
     flex-direction: column;
     gap: 4px;
   }
+  #members {
+    width: 180px;
+    border-left: 1px solid var(--border);
+    background: var(--panel);
+    padding: 12px;
+    overflow-y: auto;
+    flex-shrink: 0;
+  }
+  #members h2 {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--muted);
+    margin: 0 0 8px;
+    font-weight: 600;
+  }
+  #members ul { list-style: none; margin: 0; padding: 0; }
+  #members li { padding: 3px 0; display: flex; align-items: center; gap: 6px; }
+  #members li::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--ok);
+    flex-shrink: 0;
+  }
+  #members .empty { color: var(--muted); font-size: 13px; }
   .line { display: flex; gap: 8px; align-items: baseline; }
   .time { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
   .tag {
@@ -102,7 +130,13 @@
   <span id="status">disconnected</span>
 </header>
 
-<div id="log"></div>
+<div id="main">
+  <div id="log"></div>
+  <aside id="members">
+    <h2>Members</h2>
+    <ul id="memberList"></ul>
+  </aside>
+</div>
 
 <footer>
   <input id="text" placeholder="Message, then press Enter" maxlength="500" disabled>
@@ -148,6 +182,51 @@
     if (atBottom) log.scrollTop = log.scrollHeight;
   }
 
+  let membersTimer = null;
+
+  // Presence comes from the REST API rather than the socket: the chat protocol
+  // has no membership frame, and polling keeps the client in step even when
+  // somebody's connection drops without sending LEAVE.
+  async function refreshMembers() {
+    const room = $("room").value.trim() || "1";
+    const list = $("memberList");
+
+    try {
+      const response = await fetch("/api/rooms/" + encodeURIComponent(room));
+      if (!response.ok) return;
+
+      const detail = await response.json();
+      list.innerHTML = "";
+
+      if (!detail.members || detail.members.length === 0) {
+        const empty = document.createElement("li");
+        empty.className = "empty";
+        empty.textContent = "nobody here";
+        list.appendChild(empty);
+        return;
+      }
+
+      for (const name of detail.members) {
+        const item = document.createElement("li");
+        item.textContent = name;
+        list.appendChild(item);
+      }
+    } catch (e) {
+      // a failed poll is not worth interrupting the conversation for
+    }
+  }
+
+  function startMemberPolling() {
+    refreshMembers();
+    membersTimer = setInterval(refreshMembers, 5000);
+  }
+
+  function stopMemberPolling() {
+    if (membersTimer) clearInterval(membersTimer);
+    membersTimer = null;
+    $("memberList").innerHTML = "";
+  }
+
   function frame(type, text) {
     return JSON.stringify({
       userId: 1,
@@ -169,6 +248,7 @@
       setStatus("connected", "live");
       socket.send(frame("JOIN", "Joining"));
       setJoined(true);
+      startMemberPolling();
       $("text").focus();
     };
 
@@ -181,11 +261,18 @@
         return;
       }
       append(payload.status || "OK", payload.message);
+
+      // membership just changed, so do not wait for the next poll
+      const text = payload.message || "";
+      if (text.endsWith("joined the room") || text.endsWith("left the room")) {
+        refreshMembers();
+      }
     };
 
     socket.onclose = () => {
       setStatus("disconnected", "down");
       setJoined(false);
+      stopMemberPolling();
       socket = null;
     };
 
