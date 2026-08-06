@@ -46,6 +46,13 @@ public class ChatServerWSHandler implements WebSocketHandler {
     private final Set<WebSocketSession> joinedSessions = ConcurrentHashMap.newKeySet();
 
     /**
+     * Username claimed by each joined session, keyed by session id.
+     * Kept separately from chatRooms because a closing connection has to be
+     * resolved back to its username without parsing another frame.
+     */
+    private final ConcurrentHashMap<String, String> sessionUsernames = new ConcurrentHashMap<>();
+
+    /**
      * Fan-out is enabled by default. Load and latency benchmarks can turn it off
      * (streamline.broadcast.enabled=false) so measurements only see the direct ack.
      */
@@ -191,6 +198,7 @@ public class ChatServerWSHandler implements WebSocketHandler {
                 }
                 chatRooms.computeIfAbsent(roomId, k -> new CopyOnWriteArrayList<>()).add(session);
                 joinedSessions.add(session);
+                rememberUsername(session, chatMessage.getUsername());
 
                 // Send history
                 List<ChatMessage> history = chatService.getRecentMessages(roomId);
@@ -213,6 +221,7 @@ public class ChatServerWSHandler implements WebSocketHandler {
                     roomSessions.remove(session);
                 }
                 joinedSessions.remove(session);
+                forgetUsername(session);
                 return chatMessage.getUsername() + " left the room";
 
             case TEXT:
@@ -240,6 +249,44 @@ public class ChatServerWSHandler implements WebSocketHandler {
      */
     public int getJoinedSessionCount() {
         return joinedSessions.size();
+    }
+
+    /**
+     * Members currently joined to a room, by username.
+     *
+     * The same username may be connected more than once, so duplicates are
+     * collapsed: this answers "who is here", not "how many sockets are open".
+     * Use {@link #getRoomOccupancy()} for the session count.
+     *
+     * @param roomId -String, Representing the room to inspect
+     * @return sorted usernames, empty when the room has no members
+     */
+    public List<String> getRoomMembers(String roomId) {
+        CopyOnWriteArrayList<WebSocketSession> sessions = chatRooms.get(roomId);
+        if (sessions == null) {
+            return List.of();
+        }
+
+        Set<String> names = new TreeSet<>();
+        for (WebSocketSession session : sessions) {
+            String username = sessionUsernames.get(session.getId());
+            if (username != null) {
+                names.add(username);
+            }
+        }
+        return List.copyOf(names);
+    }
+
+    private void rememberUsername(WebSocketSession session, String username) {
+        if (session.getId() != null && username != null) {
+            sessionUsernames.put(session.getId(), username);
+        }
+    }
+
+    private void forgetUsername(WebSocketSession session) {
+        if (session.getId() != null) {
+            sessionUsernames.remove(session.getId());
+        }
     }
 
     /**
@@ -350,6 +397,7 @@ public class ChatServerWSHandler implements WebSocketHandler {
         }
 
         joinedSessions.remove(session);
+        forgetUsername(session);
         // buckets are keyed by session id, so drop this one or the map grows forever
         if (session.getId() != null) {
             rateLimiters.remove(session.getId());
