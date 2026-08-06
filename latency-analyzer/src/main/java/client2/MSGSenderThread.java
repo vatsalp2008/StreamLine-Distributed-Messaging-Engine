@@ -68,7 +68,7 @@ public class MSGSenderThread implements Runnable {
                 // Send and get data
                 MessageData data = sendMessageAndWait(msg);
 
-                if (data != null && data.latency >= 0) {
+                if (data != null && data.getLatency() >= 0) {
                     onSuccess();
                     synchronized(messageDataList) {
                         messageDataList.add(data);

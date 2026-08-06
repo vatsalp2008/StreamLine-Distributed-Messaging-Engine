@@ -134,7 +134,7 @@ public class MainPhase {
         // Calculate statistics from message data
         ArrayList<Long> latencies = new ArrayList<>();
         for (int i = 0; i < allMessageData.size(); i++) {
-            latencies.add(allMessageData.get(i).latency);
+            latencies.add(allMessageData.get(i).getLatency());
         }
 
         LatencyStats stats = LatencyStats.of(latencies);
@@ -170,12 +170,7 @@ public class MainPhase {
 
             // Data
             for (int i = 0; i < allMessageData.size(); i++) {
-                MessageData d = allMessageData.get(i);
-                writer.println(d.timestamp + "," +
-                        d.messageType + "," +
-                        d.latency + "," +
-                        d.statusCode + "," +
-                        d.roomId);
+                writer.println(allMessageData.get(i).toCsvRow());
             }
             writer.close();
         } catch (Exception e) {
@@ -193,11 +188,11 @@ public class MainPhase {
 
         try {
             // Find first and last message time
-            long firstTime = allMessageData.get(0).timestamp;
-            long lastTime = allMessageData.get(0).timestamp;
+            long firstTime = allMessageData.get(0).getTimestamp();
+            long lastTime = allMessageData.get(0).getTimestamp();
 
             for (int i = 0; i < allMessageData.size(); i++) {
-                long timestamp = allMessageData.get(i).timestamp;
+                long timestamp = allMessageData.get(i).getTimestamp();
                 if (timestamp < firstTime) firstTime = timestamp;
                 if (timestamp > lastTime) lastTime = timestamp;
             }
@@ -210,7 +205,7 @@ public class MainPhase {
             int[] bucketCounts = new int[numBuckets];
 
             for (int i = 0; i < allMessageData.size(); i++) {
-                long elapsed = allMessageData.get(i).timestamp - firstTime;
+                long elapsed = allMessageData.get(i).getTimestamp() - firstTime;
                 int bucketNum = (int)(elapsed / 10000);
 
                 if (bucketNum >= 0 && bucketNum < numBuckets) {
