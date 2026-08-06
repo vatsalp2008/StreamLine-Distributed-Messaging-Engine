@@ -8,8 +8,8 @@ paired with two benchmark clients used to measure its throughput and tail latenc
 ```
 Server/
 ├── src/main/java/server/
-│   ├── api/            # REST controller, response records, error handling
-│   ├── configure/      # WebSocket handler, rate limiter, async pool, probes
+│   ├── api/            # REST controller, response records, error handling, OpenAPI
+│   ├── configure/      # WebSocket handler, rate limiter, metrics, async pool, probes
 │   ├── model/          # ChatMessage entity
 │   ├── repository/     # MessageRepository (Spring Data JPA)
 │   └── service/        # ChatService (async, transactional persistence)
@@ -19,9 +19,14 @@ Server/
 ├── Dockerfile
 └── pom.xml
 
+bench-common/           # Message model, config, backoff and generator shared by both clients
 load-tester/            # Throughput benchmark (warm-up + main phase)
 latency-analyzer/       # Per-message latency capture, writes CSV reports
 ```
+
+The two benchmark clients share `bench-common`, which they resolve from the
+local Maven repository. `make` installs it automatically; building a client
+directly needs `mvn install -f bench-common/pom.xml` first.
 
 **Key design decisions**
 
@@ -88,11 +93,30 @@ server can be exercised without any extra tooling.
 | `GET /ready` | Readiness probe; checks the database, 503 when not ready |
 | `GET /stats` | Live room count, joined sessions, and per-room occupancy |
 | `GET /api/rooms` | Rooms with at least one member, with stored message counts |
+| `GET /api/rooms/{roomId}` | One room: members present, sessions, stored messages |
 | `GET /api/rooms/{roomId}/messages` | Paginated room history, newest first |
+| `GET /swagger-ui.html` | Interactive API documentation |
+| `GET /v3/api-docs` | OpenAPI document |
+| `GET /actuator/health` | Actuator health, including database status |
+| `GET /actuator/metrics` | JVM, HTTP and chat metrics |
+| `GET /actuator/prometheus` | The same metrics in Prometheus format |
 
 Use `/health` for liveness and `/ready` for load-balancer routing: a server whose
 database is unreachable is still alive but cannot persist anything, so only
 `/ready` reports it as unavailable.
+
+### Who is in a room
+
+```bash
+curl http://localhost:8080/api/rooms/1
+```
+
+```json
+{ "roomId": "1", "members": ["alice", "bob"], "sessions": 2, "storedMessages": 96 }
+```
+
+`members` is de-duplicated, so a user connected twice appears once; `sessions`
+counts open sockets.
 
 ### Reading history
 
@@ -160,6 +184,30 @@ Every setting has a working default; override through environment variables.
 
 Set `SPRING_PROFILES_ACTIVE=json` to emit one ECS JSON object per log line
 instead of human-readable console output.
+
+### Tracing a request
+
+Every HTTP response carries `X-Correlation-Id`. Supply the header to keep an id
+started upstream, or let the server generate one. The id is attached to every
+log line produced while handling that request, which is what makes it useful
+with the JSON logging profile:
+
+```bash
+curl -H 'X-Correlation-Id: trace-abc-123' http://localhost:8080/api/rooms
+```
+
+### Metrics
+
+Alongside the JVM and HTTP metrics Actuator provides:
+
+| Metric | Meaning |
+| --- | --- |
+| `streamline.rooms.active` | Rooms with at least one member |
+| `streamline.sessions.joined` | Sessions that have completed a JOIN |
+| `streamline.messages.accepted` | Frames that passed validation and were processed |
+| `streamline.messages.rejected` | Frames refused for validation or protocol reasons |
+| `streamline.messages.rate_limited` | Frames dropped for exceeding the send rate |
+| `streamline.broadcasts.sent` | Copies delivered to other room members |
 
 Set `BROADCAST_ENABLED=false` when benchmarking, so measured latency reflects only the
 sender's acknowledgement rather than fan-out traffic.

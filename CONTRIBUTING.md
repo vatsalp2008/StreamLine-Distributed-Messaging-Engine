@@ -5,15 +5,27 @@
 | Module | What it is |
 | --- | --- |
 | `Server/` | Spring Boot WebSocket server, REST API, and browser client |
+| `bench-common/` | Message model, config, backoff and generator shared by both clients |
 | `load-tester/` | Throughput benchmark (warm-up and main phases) |
 | `latency-analyzer/` | Latency benchmark; writes CSV reports |
 
-The three are independent Maven projects. There is no aggregator POM, so every
-Maven command needs `-f <module>/pom.xml`, or use the `Makefile` targets.
+They are independent Maven projects. There is no aggregator POM, so every Maven
+command needs `-f <module>/pom.xml`, or use the `Makefile` targets.
+
+`load-tester` and `latency-analyzer` depend on `bench-common` through the local
+repository, so it must be installed before either will resolve:
+
+```bash
+mvn install -f bench-common/pom.xml   # or: make common
+```
+
+Anything shared by both clients belongs in `bench-common`. The two used to carry
+near-identical copies of the message model, config reader and retry logic, and
+they drifted.
 
 ## Prerequisites
 
-- JDK 21. All three modules target release 21; a JDK 17 runtime cannot run the
+- JDK 21. Every module targets release 21; a JDK 17 runtime cannot run the
   built jars.
 - Maven 3.9+
 - Docker, only for `make docker-*`
@@ -22,7 +34,7 @@ Maven command needs `-f <module>/pom.xml`, or use the `Makefile` targets.
 
 ```bash
 make help      # list every target
-make verify    # what CI runs: all modules, clean, with tests
+make verify    # what CI runs: every module, clean, with tests
 make run       # server on :8080, browser client at /
 make bench     # throughput benchmark against a running server
 ```
@@ -48,6 +60,11 @@ match.
   tested without real waiting.
 - Mockito runs as a java agent, configured in `Server/pom.xml`. Without that it
   self-attaches, which the JDK warns about and will eventually refuse.
+- `ChatApiIntegrationTest` drives the REST API over real HTTP. Use it for things
+  that only exist in a full application, such as JSON serialisation of an
+  `Instant` or the correlation id filter; use MockMvc for controller logic.
+- `ChatServerWSHandler` has package-private constructors for tests, so a test
+  does not need a `StreamlineProperties` or a real `MeterRegistry`.
 
 ## Configuration
 
