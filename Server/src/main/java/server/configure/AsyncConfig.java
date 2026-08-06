@@ -2,7 +2,6 @@ package server.configure;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
@@ -26,17 +25,12 @@ public class AsyncConfig {
 
     public static final String PERSISTENCE_EXECUTOR = "messagePersistenceExecutor";
 
-    @Value("${streamline.persistence.core-pool-size:8}")
-    private int corePoolSize;
-
-    @Value("${streamline.persistence.max-pool-size:32}")
-    private int maxPoolSize;
-
-    @Value("${streamline.persistence.queue-capacity:10000}")
-    private int queueCapacity;
-
     @Bean(name = PERSISTENCE_EXECUTOR)
-    public Executor messagePersistenceExecutor() {
+    public Executor messagePersistenceExecutor(StreamlineProperties properties) {
+        int corePoolSize = properties.getPersistence().getCorePoolSize();
+        int maxPoolSize = properties.getPersistence().getMaxPoolSize();
+        int queueCapacity = properties.getPersistence().getQueueCapacity();
+
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
         executor.setCorePoolSize(corePoolSize);
         executor.setMaxPoolSize(maxPoolSize);

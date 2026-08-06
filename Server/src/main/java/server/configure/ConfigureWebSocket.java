@@ -1,6 +1,5 @@
 package server.configure;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.socket.config.annotation.*;
@@ -18,12 +17,16 @@ public class ConfigureWebSocket implements WebSocketConfigurer {
      */
     private final ChatServerWSHandler handler;
 
+    private final StreamlineProperties properties;
+
     /**
-     * Constructor - Spring will inject the handler
-     * @param -chatHandler, Represents the handler that manages WebSocket connections and msgs
+     * Constructor - Spring will inject the handler and settings
+     * @param handler    Represents the handler that manages WebSocket connections and msgs
+     * @param properties Represents the streamline.* settings
      */
-    public ConfigureWebSocket(ChatServerWSHandler handler) {
+    public ConfigureWebSocket(ChatServerWSHandler handler, StreamlineProperties properties) {
         this.handler = handler;
+        this.properties = properties;
     }
 
     /**
@@ -34,7 +37,7 @@ public class ConfigureWebSocket implements WebSocketConfigurer {
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry endpoints) {
         endpoints.addHandler(handler, "/chat/{roomId}")
-                .setAllowedOrigins("*");
+                .setAllowedOrigins(properties.getWs().getAllowedOrigins());
     }
 
     /**
@@ -45,20 +48,15 @@ public class ConfigureWebSocket implements WebSocketConfigurer {
      * The idle timeout reclaims sessions whose client vanished without closing,
      * which otherwise keep their room membership forever.
      *
-     * @param maxTextBytes   -int, largest accepted text frame
-     * @param maxBinaryBytes -int, largest accepted binary frame
-     * @param idleTimeoutMs  -long, how long a silent session is kept open
      */
     @Bean
-    public ServletServerContainerFactoryBean webSocketContainer(
-            @Value("${streamline.ws.max-text-bytes:8192}") int maxTextBytes,
-            @Value("${streamline.ws.max-binary-bytes:8192}") int maxBinaryBytes,
-            @Value("${streamline.ws.idle-timeout-ms:300000}") long idleTimeoutMs) {
+    public ServletServerContainerFactoryBean webSocketContainer() {
+        StreamlineProperties.Ws ws = properties.getWs();
 
         ServletServerContainerFactoryBean container = new ServletServerContainerFactoryBean();
-        container.setMaxTextMessageBufferSize(maxTextBytes);
-        container.setMaxBinaryMessageBufferSize(maxBinaryBytes);
-        container.setMaxSessionIdleTimeout(idleTimeoutMs);
+        container.setMaxTextMessageBufferSize(ws.getMaxTextBytes());
+        container.setMaxBinaryMessageBufferSize(ws.getMaxBinaryBytes());
+        container.setMaxSessionIdleTimeout(ws.getIdleTimeoutMs());
         return container;
     }
 }

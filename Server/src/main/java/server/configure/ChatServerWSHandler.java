@@ -7,7 +7,6 @@ import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.*;
 import java.io.IOException;
@@ -52,8 +51,14 @@ public class ChatServerWSHandler implements WebSocketHandler {
      */
     private final boolean broadcastEnabled;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public ChatServerWSHandler(Validator validator, ChatService chatService,
-            @Value("${streamline.broadcast.enabled:true}") boolean broadcastEnabled) {
+            StreamlineProperties properties) {
+        this(validator, chatService, properties.getBroadcast().isEnabled());
+    }
+
+    /** Direct constructor, used by tests that do not need a properties object. */
+    ChatServerWSHandler(Validator validator, ChatService chatService, boolean broadcastEnabled) {
         this.validator = validator;
         this.chatService = chatService;
         this.broadcastEnabled = broadcastEnabled;
