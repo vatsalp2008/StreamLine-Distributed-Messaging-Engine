@@ -13,21 +13,16 @@
 	<version>0.0.1-SNAPSHOT</version>
 	<name>StreamLine</name>
 	<description>High-performance distributed messaging engine with async persistence</description>
-	<url/>
-	<licenses>
-		<license/>
-	</licenses>
-	<developers>
-		<developer/>
-	</developers>
+	<url>https://github.com/vatsalp2008/StreamLine-Distributed-Messaging-Engine</url>
+
 	<scm>
-		<connection/>
-		<developerConnection/>
-		<tag/>
-		<url/>
+		<connection>scm:git:https://github.com/vatsalp2008/StreamLine-Distributed-Messaging-Engine.git</connection>
+		<url>https://github.com/vatsalp2008/StreamLine-Distributed-Messaging-Engine</url>
 	</scm>
+
 	<properties>
 		<java.version>21</java.version>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 	</properties>
 	<dependencies>
 		<dependency>
