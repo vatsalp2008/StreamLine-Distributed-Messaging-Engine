@@ -3,6 +3,8 @@ package server.service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import server.configure.AsyncConfig;
@@ -51,5 +53,24 @@ public class ChatService {
     @Transactional(readOnly = true)
     public List<ChatMessage> getRecentMessages(String roomId) {
         return messageRepository.findTop50ByRoomIdOrderByTimestampDescIdDesc(roomId);
+    }
+
+    /**
+     * @param roomId   -String, Representing the room to read
+     * @param pageable -Pageable, page number and size
+     * @return one page of the room's history, newest first
+     */
+    @Transactional(readOnly = true)
+    public Page<ChatMessage> getMessagePage(String roomId, Pageable pageable) {
+        return messageRepository.findByRoomIdOrderByTimestampDescIdDesc(roomId, pageable);
+    }
+
+    /**
+     * @param roomId -String, Representing the room to count
+     * @return how many messages the room has stored
+     */
+    @Transactional(readOnly = true)
+    public long countMessages(String roomId) {
+        return messageRepository.countByRoomId(roomId);
     }
 }
