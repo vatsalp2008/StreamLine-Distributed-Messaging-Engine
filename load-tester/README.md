@@ -1,132 +1,99 @@
 # StreamLine Load Tester
 
-This client runs high-volume load tests (up to 500K messages) to stress-test the StreamLine server.
+Throughput benchmark for the StreamLine server. Opens many concurrent WebSocket connections,
+sends generated chat traffic, and reports how many messages the server acknowledged per second.
 
-## What It Does
+## Phases
 
-**WarmUp Phase (WarmUpPhase.java):**
-- Creates 32 threads
-- Each thread sends 1,000 messages
-- Total: 32,000 messages
-- Simple throughput test
+| Phase | Default threads | Default messages | Purpose |
+| --- | --- | --- | --- |
+| `client.WarmUpPhase` | 32 | 32,000 | Warms JIT, connection pools, and the DB before measuring |
+| `client.MainPhase` | 100 | 500,000 | The measured run |
 
-**Main Phase (MainPhase.java):**
-- Creates 100 threads (configurable)
-- Sends remaining messages to reach 500,000 total
-- Includes message generator and queue
-- More realistic load test
+Both are thin wrappers over `BenchmarkRunner`, which owns the actual load logic.
 
-Both phases measure performance and show success/failure rates.
+## Running
 
-### Method 1: Run Directly from IDE 
-
-**Step 1: Update the server URL in the code**
-
-Open either `WarmUpPhase.java` or `MainPhase.java` and find this line:
-```java
-String Server_Url = "ws://localhost:8080/chat";
-```
-
-Change it to your EC2 server URL:
-```java
-String serverUrl = "ws://<your ec2-public-ip>:8080/chat";
-```
-
-**Step 2: Right-click and run**
-
-- In IntelliJ: Right-click on `WarmUpPhase.java` → Run 'WarmUpPhase.main()'
-- OR: Right-click on `MainPhase.java` → Run 'MainPhase.main()'
-
-That's it! The program will run and show results in the console.
-
-### Method 2: Run from Command Line
-
-If you don't want to change the code, you can pass the URL as an argument:
-
-**For WarmUp Phase:**
-```bash
-cd load-tester
-mvn clean compile
-mvn exec:java -Dexec.mainClass="client.model.WarmUpPhase" -Dexec.args="ws://YOUR-EC2-IP:8080/chat"
-```
-
-**For Main Phase:**
-```bash
-cd load-tester
-mvn clean compile
-mvn exec:java -Dexec.mainClass="client.model.MainPhase" -Dexec.args="ws://YOUR-EC2-IP:8080/chat"
-```
-
-### Examples:
+Nothing needs to be edited or recompiled to point at a different server: every setting is read
+at startup from a system property, falling back to an environment variable, then to the default.
 
 ```bash
-# WarmUp with EC2 server
-mvn exec:java -Dexec.mainClass="client.model.WarmUpPhase" -Dexec.args="ws://ec2-52-12-34-56.us-west-2.compute.amazonaws.com:8080/chat"
+# against a local server
+mvn compile exec:java -Dexec.mainClass=client.WarmUpPhase
 
-# Main Phase with EC2 server
-mvn exec:java -Dexec.mainClass="client.model.MainPhase" -Dexec.args="ws://ec2-52-12-34-56.us-west-2.compute.amazonaws.com:8080/chat"
-
-# With localhost (for testing)
-mvn exec:java -Dexec.mainClass="client.model.WarmUpPhase" -Dexec.args="ws://localhost:8080/chat"
+# against a remote server, with a smaller run
+mvn compile exec:java -Dexec.mainClass=client.MainPhase \
+  -Dstreamline.url=ws://your-host:8080 \
+  -Dstreamline.threads=50 \
+  -Dstreamline.messages=100000
 ```
 
-## Quick Start (Recommended Way)
+As a self-contained jar:
 
-1. **Start your server on EC2**
-2. **Get your EC2 public IP/DNS**
-3. **Update the URL in code**
-4. **Run it**
-5. **Repeat for Main Phase**
+```bash
+mvn clean package
+java -Dstreamline.url=ws://your-host:8080 \
+     -jar target/streamline-load-tester-1.0.0-jar-with-dependencies.jar
+```
 
-## What You'll See
+The jar's manifest runs `WarmUpPhase`; use `-cp target/...jar client.MainPhase` for the main phase.
 
-### WarmUp Phase Output:
+In Docker, via the repo-root compose file:
+
+```bash
+docker compose --profile bench up
+```
+
+## Configuration
+
+| System property | Environment variable | Default |
+| --- | --- | --- |
+| `streamline.url` | `STREAMLINE_URL` | `ws://localhost:8080` |
+| `streamline.threads` | `STREAMLINE_THREADS` | 32 warm-up / 100 main |
+| `streamline.messages` | `STREAMLINE_MESSAGES` | 32,000 warm-up / 500,000 main |
+| `streamline.rooms` | `STREAMLINE_ROOMS` | 20 |
+
+Values that are blank, non-numeric, or non-positive fall back to the default rather than
+failing the run. Senders are spread evenly across `streamline.rooms` rooms.
+
+## How a run works
+
+1. A generator thread fills a bounded queue (100,000 slots) with random messages: 90% `TEXT`,
+   5% `JOIN`, 5% `LEAVE`.
+2. After a 2 second head start, the sender threads connect, each sending `JOIN` first.
+3. Each sender takes messages off the queue and waits for the server's acknowledgement before
+   sending the next, so the reported rate reflects round trips rather than fire-and-forget
+   writes. A send is retried up to 5 times with exponential backoff, and a dropped connection
+   is re-established up to 3 times.
+4. Once every sender has finished, the totals are printed.
+
+## Example output
 
 ```
----------- WarmUp Phase ----------
-Successful messages: 32000
+---------  WarmUp Phase ----------
+Successful messages sent: 32000
 Failed messages: 0
 Total runtime: 23698 ms
 Throughput: 1350.32 msg/sec
-Connections: 32
-Reconnections: 0
-------------------------------------
-```
-
-### Main Phase Output:
-
-```
----------- Main Phase Client1 ----------
-Successful messages sent: 499998
-Failed messages: 2
-Total runtime: 290396 ms
-Throughput: 1721.78 msg/sec
-Total Connections: 100
+Total Connections: 32
 Reconnections: 0
 -----------------------------------------
 ```
 
-## How They Work
+Throughput counts only acknowledged messages, so failures never inflate the number.
 
-### WarmUp Phase:
-1. Creates 32 threads
-2. Each thread opens a WebSocket connection
-3. Each thread sends 1,000 messages one by one
-4. Waits for server response after each message
-5. Shows results when done
+## Files
 
-### Main Phase:
-1. Creates a message generator thread
-2. Generator creates all messages and puts them in a queue
-3. Creates 100 sender threads
-4. Each sender thread takes messages from queue and sends them
-5. Keeps connections open (more efficient)
-6. Shows results when done
+| File | Role |
+| --- | --- |
+| `BenchmarkRunner.java` | Runs a phase: generator, sender pool, results |
+| `MSGSenderThread.java` | One connection; sends and waits for each acknowledgement |
+| `GenerateMessage.java` | Produces the random message stream |
+| `TestConfig.java` | Resolves settings from properties and the environment |
+| `model/ChatMessage.java` | Wire format sent to the server |
 
-## Files in This Project
+## Notes
 
-- `WarmUpPhase.java` - Entry point for warmup (32 threads, 32K messages)
-- `MainPhase.java` - Entry point for main load (80 threads, 500k messages)
-- `MSGSenderThread.java` - Worker thread that sends messages
-- `GenerateMessage.java` - Creates random messages
-- `ChatMessage.java` - Message data structure
+- Benchmark with `BROADCAST_ENABLED=false` on the server if you want the measurement to reflect
+  only the sender's acknowledgement rather than fan-out traffic to other room members.
+- For per-message latency percentiles and CSV reports, use the `latency-analyzer` module.
