@@ -16,6 +16,9 @@ public class MSGSenderThread implements Runnable {
     private static final int Retries = 5;
     private static final int Timeout_Response = 200;
 
+    /** 40ms doubling per retry, capped so a long outage does not stall a thread. */
+    private static final Backoff BACKOFF = new Backoff(40, 2000);
+
     private String serverUrl;
     private BlockingQueue<ChatMessage> queue;
     private int messagesToSend;
@@ -204,18 +207,10 @@ public class MSGSenderThread implements Runnable {
                 if (receivedResponse && gotResponse) {
                     return true;
                 }
-//                Thread.sleep(20);
-//                return true;
 
             } catch (Exception e) {
-
-                if (attempt < Retries - 1) {
-                    try {
-                        Thread.sleep((long) Math.pow(2, attempt) * 40);
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                        return false;
-                    }
+                if (attempt < Retries - 1 && !BACKOFF.sleepForAttempt(attempt)) {
+                    return false;
                 }
             }
         }
