@@ -26,7 +26,9 @@ VOLUME ["/app/data"]
 # container memory, not host memory, decides the heap
 ENV JAVA_OPTS="-XX:MaxRAMPercentage=75.0"
 
-HEALTHCHECK --interval=30s --timeout=3s --start-period=30s --retries=3 \
-    CMD wget -qO- http://localhost:8080/health || exit 1
+# /ready rather than /health: liveness stays green with a dead database, so it
+# would keep an instance that cannot persist anything in the load balancer.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD wget -qO- http://localhost:8080/ready || exit 1
 
 ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar app.jar"]

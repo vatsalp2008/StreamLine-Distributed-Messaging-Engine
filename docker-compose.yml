@@ -17,7 +17,7 @@ services:
     volumes:
       - streamline-data:/app/data
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/ready"]
       interval: 10s
       timeout: 3s
       retries: 5
