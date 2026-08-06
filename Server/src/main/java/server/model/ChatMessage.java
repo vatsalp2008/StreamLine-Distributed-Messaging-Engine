@@ -137,4 +137,45 @@ public class ChatMessage {
     public void setRoomId(String roomId) {
         this.roomId = roomId;
     }
+
+    /**
+     * Two messages are the same row only when both carry the same generated id.
+     *
+     * An unsaved entity has no id yet, so it is only equal to itself; otherwise
+     * every new message would collide with every other new message in a set.
+     */
+    @Override
+    public boolean equals(Object other) {
+        if (this == other) {
+            return true;
+        }
+        if (!(other instanceof ChatMessage that)) {
+            return false;
+        }
+        return id != null && id.equals(that.id);
+    }
+
+    /**
+     * Constant so that a message keeps the same hash after it is persisted and
+     * gains an id, which a hash based on the id would not.
+     */
+    @Override
+    public int hashCode() {
+        return ChatMessage.class.hashCode();
+    }
+
+    /**
+     * Message text is deliberately omitted: this shows up in logs, and the body
+     * is user content that does not belong there.
+     */
+    @Override
+    public String toString() {
+        return "ChatMessage{id=" + id
+                + ", username='" + username + '\''
+                + ", messageType='" + messageType + '\''
+                + ", roomId='" + roomId + '\''
+                + ", timestamp=" + timestamp
+                + ", messageLength=" + (message == null ? 0 : message.length())
+                + '}';
+    }
 }
