@@ -58,8 +58,8 @@ class ChatWebSocketIntegrationTest {
 
         /**
          * Reads past any replayed history to the acknowledgement.
-         * A joining client can see its own JOIN come back as HISTORY when the async
-         * write lands before the history query runs, so the count is not fixed.
+         * How many HISTORY frames precede the ack depends on what earlier tests left
+         * in the shared in-memory database, so the count is not fixed.
          */
         JsonNode nextAck() throws Exception {
             for (int i = 0; i < 60; i++) {

@@ -193,6 +193,27 @@ class ChatServerWSHandlerTest {
     }
 
     @Test
+    void textMessagesArePersisted() throws IOException {
+        WebSocketSession session = session("/chat/5");
+
+        send(session, payload("alice", "Joining", "JOIN"));
+        send(session, payload("alice", "hello", "TEXT"));
+
+        verify(chatService).saveMessage(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq("5"));
+    }
+
+    @Test
+    void joinAndLeaveControlFramesAreNotPersisted() throws IOException {
+        WebSocketSession session = session("/chat/5");
+
+        send(session, payload("alice", "Joining", "JOIN"));
+        send(session, payload("alice", "Leaving", "LEAVE"));
+
+        // control frames are connection state, not chat history
+        verify(chatService, never()).saveMessage(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString());
+    }
+
+    @Test
     void invalidMessagesAreNotPersisted() throws IOException {
         WebSocketSession session = session("/chat/5");
 

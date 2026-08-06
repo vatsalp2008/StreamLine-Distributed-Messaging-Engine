@@ -31,6 +31,11 @@ public class ChatServerWSHandler implements WebSocketHandler {
     /** Fallback room used when the handshake URI carries no usable room id */
     static final String UNKNOWN_ROOM = "unknown";
 
+    /** Message types accepted by the protocol */
+    private static final String JOIN = "JOIN";
+    private static final String LEAVE = "LEAVE";
+    private static final String TEXT = "TEXT";
+
     private final ObjectMapper objectMapperMSG = new ObjectMapper();
     private final Validator validator;
     private final ChatService chatService;
@@ -84,8 +89,14 @@ public class ChatServerWSHandler implements WebSocketHandler {
 
             String roomId = getRoomId(session);
 
-            // Async persist all valid messages
-            chatService.saveMessage(chatMessage, roomId);
+            // Only chat content is durable. JOIN and LEAVE are connection control
+            // frames: storing them replayed "alice: Joining" back as room history, and
+            // a client could even receive its own JOIN as HISTORY when the async write
+            // beat the history query. They are also ~10% of benchmark traffic, so
+            // skipping them removes that many writes from the hot path.
+            if (TEXT.equals(chatMessage.getMessageType())) {
+                chatService.saveMessage(chatMessage, roomId);
+            }
 
             // method for getting formatted message to send in response
             String formattedMessage = chatMessageTypeProcess(session, roomId, chatMessage);
@@ -116,7 +127,7 @@ public class ChatServerWSHandler implements WebSocketHandler {
     private String chatMessageTypeProcess(WebSocketSession session, String roomId, ChatMessage chatMessage)
             throws IOException {
         switch (chatMessage.getMessageType()) {
-            case "JOIN":
+            case JOIN:
                 if (joinedSessions.contains(session)) {
                     sendResponse(session, "ERROR", "Already joined");
                     return null;
@@ -135,7 +146,7 @@ public class ChatServerWSHandler implements WebSocketHandler {
 
                 return chatMessage.getUsername() + " joined the room";
 
-            case "LEAVE":
+            case LEAVE:
                 if (!joinedSessions.contains(session)) {
                     sendResponse(session, "ERROR", "You must JOIN before LEAVE");
                     return null;
@@ -147,7 +158,7 @@ public class ChatServerWSHandler implements WebSocketHandler {
                 joinedSessions.remove(session);
                 return chatMessage.getUsername() + " left the room";
 
-            case "TEXT":
+            case TEXT:
                 if (!joinedSessions.contains(session)) {
                     sendResponse(session, "ERROR", "You must JOIN before sending TEXT");
                     return null;
