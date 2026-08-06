@@ -1,8 +1,15 @@
 package server.configure;
 
-import org.springframework.web.bind.annotation.GetMapping;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.*;
 
 /**
@@ -11,10 +18,17 @@ import java.util.*;
 @RestController
 public class ServerStatus {
 
-    private final ChatServerWSHandler handler;
+    private static final Logger log = LoggerFactory.getLogger(ServerStatus.class);
 
-    public ServerStatus(ChatServerWSHandler handler) {
+    /** Kept short so a hung database fails the probe rather than stalling it. */
+    private static final int READINESS_TIMEOUT_SECONDS = 2;
+
+    private final ChatServerWSHandler handler;
+    private final DataSource dataSource;
+
+    public ServerStatus(ChatServerWSHandler handler, DataSource dataSource) {
         this.handler = handler;
+        this.dataSource = dataSource;
     }
 
     /**
@@ -23,6 +37,32 @@ public class ServerStatus {
     @GetMapping("/health")
     public ResponseEntity<Map<String, String>> serverStatus() {
         return ResponseEntity.ok(Map.of("status", "RUNNING"));
+    }
+
+    /**
+     * Readiness probe: reports whether this instance can actually serve traffic.
+     *
+     * Unlike /health this touches the database, because an instance whose
+     * datasource is unreachable is running but cannot persist a message. Returns
+     * 503 when not ready, so a load balancer stops routing to it instead of
+     * sending traffic into a broken node.
+     */
+    @GetMapping("/ready")
+    public ResponseEntity<Map<String, String>> readiness() {
+        try (Connection connection = dataSource.getConnection()) {
+            if (connection.isValid(READINESS_TIMEOUT_SECONDS)) {
+                return ResponseEntity.ok(Map.of("status", "READY", "database", "UP"));
+            }
+            return notReady("database connection is not valid");
+        } catch (SQLException e) {
+            log.warn("Readiness check failed: {}", e.getMessage());
+            return notReady(e.getMessage());
+        }
+    }
+
+    private ResponseEntity<Map<String, String>> notReady(String reason) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(Map.of("status", "NOT_READY", "database", "DOWN", "reason", reason));
     }
 
     /**

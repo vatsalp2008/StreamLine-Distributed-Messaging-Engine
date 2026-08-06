@@ -23,12 +23,14 @@ class ServerStatusTest {
 
     private ChatServerWSHandler handler;
     private MockMvc mockMvc;
+    private javax.sql.DataSource dataSource;
 
     @BeforeEach
     void setUp() {
         Validator validator = Validation.buildDefaultValidatorFactory().getValidator();
         handler = new ChatServerWSHandler(validator, mock(ChatService.class), true);
-        mockMvc = MockMvcBuilders.standaloneSetup(new ServerStatus(handler)).build();
+        dataSource = mock(javax.sql.DataSource.class);
+        mockMvc = MockMvcBuilders.standaloneSetup(new ServerStatus(handler, dataSource)).build();
     }
 
     private void join(String room, String username) throws IOException {
@@ -43,6 +45,52 @@ class ServerStatusTest {
 
     @Test
     void healthReportsRunning() throws Exception {
+        mockMvc.perform(get("/health"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("RUNNING"));
+    }
+
+    @Test
+    void readinessReportsReadyWhenTheDatabaseAnswers() throws Exception {
+        java.sql.Connection connection = mock(java.sql.Connection.class);
+        when(dataSource.getConnection()).thenReturn(connection);
+        when(connection.isValid(org.mockito.ArgumentMatchers.anyInt())).thenReturn(true);
+
+        mockMvc.perform(get("/ready"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("READY"))
+                .andExpect(jsonPath("$.database").value("UP"));
+    }
+
+    @Test
+    void readinessFailsWithServiceUnavailableWhenTheDatabaseIsDown() throws Exception {
+        when(dataSource.getConnection())
+                .thenThrow(new java.sql.SQLException("connection refused"));
+
+        // a live but unusable instance must be taken out of rotation
+        mockMvc.perform(get("/ready"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.status").value("NOT_READY"))
+                .andExpect(jsonPath("$.database").value("DOWN"));
+    }
+
+    @Test
+    void readinessFailsWhenTheConnectionIsInvalid() throws Exception {
+        java.sql.Connection connection = mock(java.sql.Connection.class);
+        when(dataSource.getConnection()).thenReturn(connection);
+        when(connection.isValid(org.mockito.ArgumentMatchers.anyInt())).thenReturn(false);
+
+        mockMvc.perform(get("/ready"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.status").value("NOT_READY"));
+    }
+
+    @Test
+    void livenessStaysUpEvenWhenTheDatabaseIsDown() throws Exception {
+        when(dataSource.getConnection())
+                .thenThrow(new java.sql.SQLException("connection refused"));
+
+        // liveness answers "is the process alive", so it must not depend on I/O
         mockMvc.perform(get("/health"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("RUNNING"));
