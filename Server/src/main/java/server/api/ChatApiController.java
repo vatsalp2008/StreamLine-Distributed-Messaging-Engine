@@ -1,5 +1,10 @@
 package server.api;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
@@ -24,6 +29,7 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api")
+@Tag(name = "Chat", description = "Read-only view of rooms and their history")
 public class ChatApiController {
 
     /** Matches the 50 messages replayed over WebSocket on join. */
@@ -46,6 +52,11 @@ public class ChatApiController {
      * A room with no members is not listed even if it has stored history, since
      * the live room map is what makes a room "active".
      */
+    @Operation(summary = "List active rooms",
+            description = "Rooms holding at least one joined session. A room with stored "
+                    + "history but no members is not listed, since live membership is what "
+                    + "makes a room active.")
+    @ApiResponse(responseCode = "200", description = "Active rooms, ordered by room id")
     @GetMapping("/rooms")
     public ResponseEntity<List<RoomSummary>> rooms() {
         Map<String, Integer> occupancy = handler.getRoomOccupancy();
@@ -68,10 +79,21 @@ public class ChatApiController {
      * @param page   zero-based page number
      * @param size   messages per page, clamped to 1..MAX_PAGE_SIZE
      */
+    @Operation(summary = "Read room history",
+            description = "Messages for a room, newest first. An unknown room returns an "
+                    + "empty page rather than a 404, so polling a room that has not been "
+                    + "used yet is not an error.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "A page of history"),
+            @ApiResponse(responseCode = "400", description = "Negative or non-numeric page")
+    })
     @GetMapping("/rooms/{roomId}/messages")
     public ResponseEntity<MessagePage> messages(
+            @Parameter(description = "Room identifier used in the WebSocket path")
             @PathVariable String roomId,
+            @Parameter(description = "Zero-based page number")
             @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "Messages per page; clamped to 1..200")
             @RequestParam(defaultValue = "" + DEFAULT_PAGE_SIZE) int size) {
 
         if (page < 0) {
