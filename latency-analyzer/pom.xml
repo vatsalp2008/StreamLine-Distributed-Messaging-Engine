@@ -16,6 +16,13 @@
     </properties>
 
     <dependencies>
+        <!-- Message model, config, backoff and generator shared with load-tester -->
+        <dependency>
+            <groupId>com.streamline</groupId>
+            <artifactId>streamline-bench-common</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+
         <dependency>
             <groupId>org.java-websocket</groupId>
             <artifactId>Java-WebSocket</artifactId>

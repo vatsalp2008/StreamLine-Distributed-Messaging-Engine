@@ -1,6 +1,8 @@
 package client2;
 
-import client2.model.ChatMessage;
+import bench.TestConfig;
+import bench.GenerateMessage;
+import bench.model.ChatMessage;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;

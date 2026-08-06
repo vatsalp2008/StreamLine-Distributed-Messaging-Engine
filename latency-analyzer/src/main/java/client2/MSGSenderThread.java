@@ -1,6 +1,8 @@
 package client2;
 
-import client2.model.ChatMessage;
+import bench.TestConfig;
+import bench.Backoff;
+import bench.model.ChatMessage;
 import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.handshake.ServerHandshake;
 import java.net.URI;
@@ -16,6 +18,9 @@ public class MSGSenderThread implements Runnable {
 
     private static final int Retries = 5;
     private static final int Timeout_Response = 200;
+
+    /** 40ms doubling per retry, capped so a long outage does not stall a thread. */
+    private static final Backoff BACKOFF = new Backoff(40, 2000);
 
     private String serverUrl;
     private BlockingQueue<ChatMessage> queue;
@@ -215,13 +220,8 @@ public class MSGSenderThread implements Runnable {
 
             } catch (Exception e) {
                 // Error occurred - retry with backoff
-                if (attempt < Retries - 1) {
-                    try {
-                        Thread.sleep((long) Math.pow(2, attempt) * 40);
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                        return null;
-                    }
+                if (attempt < Retries - 1 && !BACKOFF.sleepForAttempt(attempt)) {
+                    return null;
                 }
             }
         }
