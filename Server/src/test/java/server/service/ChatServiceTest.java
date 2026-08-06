@@ -59,14 +59,14 @@ class ChatServiceTest {
     @Test
     void getRecentMessagesReturnsRepositoryHistory() {
         List<ChatMessage> history = List.of(message("newest", "TEXT"), message("older", "TEXT"));
-        when(repository.findTop50ByRoomIdOrderByTimestampDesc("room-3")).thenReturn(history);
+        when(repository.findTop50ByRoomIdOrderByTimestampDescIdDesc("room-3")).thenReturn(history);
 
         assertThat(chatService.getRecentMessages("room-3")).isEqualTo(history);
     }
 
     @Test
     void getRecentMessagesReturnsEmptyListForUnknownRoom() {
-        when(repository.findTop50ByRoomIdOrderByTimestampDesc(anyString())).thenReturn(List.of());
+        when(repository.findTop50ByRoomIdOrderByTimestampDescIdDesc(anyString())).thenReturn(List.of());
 
         assertThat(chatService.getRecentMessages("never-used")).isEmpty();
     }

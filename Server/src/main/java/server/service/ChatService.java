@@ -50,6 +50,6 @@ public class ChatService {
      */
     @Transactional(readOnly = true)
     public List<ChatMessage> getRecentMessages(String roomId) {
-        return messageRepository.findTop50ByRoomIdOrderByTimestampDesc(roomId);
+        return messageRepository.findTop50ByRoomIdOrderByTimestampDescIdDesc(roomId);
     }
 }
