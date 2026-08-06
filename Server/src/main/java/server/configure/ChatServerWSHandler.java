@@ -35,7 +35,7 @@ public class ChatServerWSHandler implements WebSocketHandler {
     private static final String LEAVE = "LEAVE";
     private static final String TEXT = "TEXT";
 
-    private final ObjectMapper objectMapperMSG = new ObjectMapper();
+    private final ObjectMapper objectMapperMSG;
     private final Validator validator;
     private final ChatService chatService;
 
@@ -53,15 +53,33 @@ public class ChatServerWSHandler implements WebSocketHandler {
 
     @org.springframework.beans.factory.annotation.Autowired
     public ChatServerWSHandler(Validator validator, ChatService chatService,
-            StreamlineProperties properties) {
-        this(validator, chatService, properties.getBroadcast().isEnabled());
+            StreamlineProperties properties, ObjectMapper objectMapper) {
+        this(validator, chatService, properties.getBroadcast().isEnabled(), objectMapper);
     }
 
     /** Direct constructor, used by tests that do not need a properties object. */
     ChatServerWSHandler(Validator validator, ChatService chatService, boolean broadcastEnabled) {
+        this(validator, chatService, broadcastEnabled, defaultObjectMapper());
+    }
+
+    ChatServerWSHandler(Validator validator, ChatService chatService, boolean broadcastEnabled,
+            ObjectMapper objectMapper) {
         this.validator = validator;
         this.chatService = chatService;
         this.broadcastEnabled = broadcastEnabled;
+        this.objectMapperMSG = objectMapper;
+    }
+
+    /**
+     * Mapper used when the handler is built outside Spring. Mirrors the Boot
+     * defaults that matter here: java.time support and ISO-8601 rather than
+     * numeric timestamps.
+     */
+    private static ObjectMapper defaultObjectMapper() {
+        return com.fasterxml.jackson.databind.json.JsonMapper.builder()
+                .addModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule())
+                .disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+                .build();
     }
 
     /**
