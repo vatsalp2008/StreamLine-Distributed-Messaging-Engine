@@ -48,6 +48,16 @@ commit land whose sources did not compile from scratch: the previous class files
 satisfied the test run. CI uses `clean` for this reason and local runs should
 match.
 
+This bites hardest across modules. `bench-common` is packaged *into* the client
+jars, so a client built without `clean` can bundle a stale copy of it and fail at
+runtime with `NoSuchMethodError` for a method that plainly exists in the source.
+After changing `bench-common`, reinstall it before rebuilding a client:
+
+```bash
+mvn -f bench-common/pom.xml clean install
+mvn -f load-tester/pom.xml clean verify
+```
+
 ## Tests
 
 - Unit tests sit beside the code they cover, under `src/test/java`.
@@ -65,6 +75,16 @@ match.
   `Instant` or the correlation id filter; use MockMvc for controller logic.
 - `ChatServerWSHandler` has package-private constructors for tests, so a test
   does not need a `StreamlineProperties` or a real `MeterRegistry`.
+- `BenchmarkRunnerTest` runs a real WebSocket server in-process rather than
+  mocking the transport, because what it is checking is that the generator,
+  queue, sender threads and acknowledgement handshake line up.
+- Derived Spring Data queries are only proven by running them. `MessageSearchTest`
+  uses `@DataJpaTest` against a real database for that reason: a mocked
+  repository would not catch a method name that does not parse.
+- A worker thread submitted to an executor swallows anything that is not caught,
+  because nobody reads the `Future`. Both benchmark clients catch `Throwable`, not
+  `Exception`, so an `Error` is reported instead of showing up as a silent run
+  with zero traffic.
 
 ## Configuration
 
@@ -75,6 +95,39 @@ see the table in `README.md`. Two worth knowing while developing:
   sender's acknowledgement.
 - `RATE_LIMIT_ENABLED=true` turns on per-session limits, off by default so
   benchmarks are not throttled.
+
+## Access control
+
+Auth is off by default. To exercise it locally:
+
+```bash
+AUTH_ENABLED=true AUTH_TOKEN=a-long-random-secret make run
+make warmup URL=ws://localhost:8080 STREAMLINE_TOKEN=a-long-random-secret
+```
+
+Two things are deliberate and worth preserving:
+
+- `/health` and `/ready` stay open. A load balancer has no token, and locking it
+  out makes a healthy instance look permanently down.
+- The token is accepted as a query parameter as well as a header. A browser
+  cannot set headers on a WebSocket handshake, so without it the bundled client
+  could not connect at all.
+
+## Schema changes
+
+Flyway owns the schema and Hibernate runs with `ddl-auto=validate`, so an entity
+change without a matching migration fails at startup instead of silently
+altering a table. To change the schema, add a new
+`Server/src/main/resources/db/migration/V<n>__<description>.sql`; never edit a
+migration that has already been applied.
+
+To see the DDL Hibernate expects for an entity:
+
+```bash
+java -jar Server/target/streamline-server-*.jar \
+  --spring.jpa.properties.jakarta.persistence.schema-generation.scripts.action=create \
+  --spring.jpa.properties.jakarta.persistence.schema-generation.scripts.create-target=schema.sql
+```
 
 ## Style
 
