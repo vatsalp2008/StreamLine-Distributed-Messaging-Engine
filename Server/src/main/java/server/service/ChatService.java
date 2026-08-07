@@ -66,6 +66,30 @@ public class ChatService {
     }
 
     /**
+     * Searches a room's history.
+     *
+     * @param roomId   -String, room to search
+     * @param text     -String, substring to match, case-insensitive
+     * @param username -String, restrict to one author, or null for everyone
+     * @param pageable -Pageable, page number and size
+     * @return matching messages, newest first
+     */
+    @Transactional(readOnly = true)
+    public Page<ChatMessage> searchMessages(String roomId, String text, String username,
+            Pageable pageable) {
+
+        if (username == null || username.isBlank()) {
+            return messageRepository
+                    .findByRoomIdAndMessageContainingIgnoreCaseOrderByTimestampDescIdDesc(
+                            roomId, text, pageable);
+        }
+
+        return messageRepository
+                .findByRoomIdAndUsernameIgnoreCaseAndMessageContainingIgnoreCaseOrderByTimestampDescIdDesc(
+                        roomId, username, text, pageable);
+    }
+
+    /**
      * @param roomId -String, Representing the room to count
      * @return how many messages the room has stored
      */

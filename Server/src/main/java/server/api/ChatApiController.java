@@ -79,6 +79,41 @@ public class ChatApiController {
      * @param page   zero-based page number
      * @param size   messages per page, clamped to 1..MAX_PAGE_SIZE
      */
+    @Operation(summary = "Search a room's history",
+            description = "Case-insensitive substring match on message text, newest first, "
+                    + "optionally restricted to one author. Returns the same page shape as "
+                    + "the history endpoint.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Matching messages"),
+            @ApiResponse(responseCode = "400", description = "Missing or invalid query")
+    })
+    @GetMapping("/rooms/{roomId}/search")
+    public ResponseEntity<MessagePage> search(
+            @Parameter(description = "Room identifier used in the WebSocket path")
+            @PathVariable String roomId,
+            @Parameter(description = "Text to look for, case-insensitive")
+            @RequestParam String q,
+            @Parameter(description = "Restrict results to this author")
+            @RequestParam(required = false) String username,
+            @Parameter(description = "Zero-based page number")
+            @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "Results per page; clamped to 1..200")
+            @RequestParam(defaultValue = "" + DEFAULT_PAGE_SIZE) int size) {
+
+        if (page < 0) {
+            throw new IllegalArgumentException("page must not be negative, got " + page);
+        }
+        if (q == null || q.isBlank()) {
+            throw new IllegalArgumentException("q must not be empty");
+        }
+
+        int effectiveSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+        Page<ChatMessage> result = chatService.searchMessages(
+                roomId, q.trim(), username, PageRequest.of(page, effectiveSize));
+
+        return ResponseEntity.ok(MessagePage.from(roomId, result));
+    }
+
     @Operation(summary = "Describe one room",
             description = "Members present, open session count and stored message total. "
                     + "A room nobody has joined reports zero members rather than 404, so a "
