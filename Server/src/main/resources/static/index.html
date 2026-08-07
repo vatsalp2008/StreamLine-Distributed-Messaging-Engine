@@ -125,6 +125,7 @@
   <h1>StreamLine</h1>
   <input id="user" placeholder="username" value="alice" size="10" maxlength="20">
   <input id="room" placeholder="room" value="1" size="6">
+  <input id="token" placeholder="token (if required)" size="16" type="password">
   <button id="connect">Join</button>
   <button id="leave" class="secondary" disabled>Leave</button>
   <span id="status">disconnected</span>
@@ -164,6 +165,7 @@
     $("send").disabled = !joined;
     $("user").disabled = joined;
     $("room").disabled = joined;
+    $("token").disabled = joined;
   }
 
   function append(status, body) {
@@ -182,49 +184,26 @@
     if (atBottom) log.scrollTop = log.scrollHeight;
   }
 
-  let membersTimer = null;
-
-  // Presence comes from the REST API rather than the socket: the chat protocol
-  // has no membership frame, and polling keeps the client in step even when
-  // somebody's connection drops without sending LEAVE.
-  async function refreshMembers() {
-    const room = $("room").value.trim() || "1";
+  // Membership arrives as PRESENCE frames pushed by the server whenever someone
+  // joins or leaves, so the client neither polls nor needs the REST API.
+  function renderMembers(csv) {
     const list = $("memberList");
+    list.innerHTML = "";
 
-    try {
-      const response = await fetch("/api/rooms/" + encodeURIComponent(room));
-      if (!response.ok) return;
-
-      const detail = await response.json();
-      list.innerHTML = "";
-
-      if (!detail.members || detail.members.length === 0) {
-        const empty = document.createElement("li");
-        empty.className = "empty";
-        empty.textContent = "nobody here";
-        list.appendChild(empty);
-        return;
-      }
-
-      for (const name of detail.members) {
-        const item = document.createElement("li");
-        item.textContent = name;
-        list.appendChild(item);
-      }
-    } catch (e) {
-      // a failed poll is not worth interrupting the conversation for
+    const names = (csv || "").split(",").filter((n) => n.length > 0);
+    if (names.length === 0) {
+      const empty = document.createElement("li");
+      empty.className = "empty";
+      empty.textContent = "nobody here";
+      list.appendChild(empty);
+      return;
     }
-  }
 
-  function startMemberPolling() {
-    refreshMembers();
-    membersTimer = setInterval(refreshMembers, 5000);
-  }
-
-  function stopMemberPolling() {
-    if (membersTimer) clearInterval(membersTimer);
-    membersTimer = null;
-    $("memberList").innerHTML = "";
+    for (const name of names) {
+      const item = document.createElement("li");
+      item.textContent = name;
+      list.appendChild(item);
+    }
   }
 
   function frame(type, text) {
@@ -240,7 +219,13 @@
   function connect() {
     const room = encodeURIComponent($("room").value.trim() || "1");
     const scheme = location.protocol === "https:" ? "wss" : "ws";
-    socket = new WebSocket(scheme + "://" + location.host + "/chat/" + room);
+
+    // A browser cannot set headers on a WebSocket handshake, so when the server
+    // requires a token it has to travel as a query parameter.
+    const token = $("token").value.trim();
+    const auth = token ? "?token=" + encodeURIComponent(token) : "";
+
+    socket = new WebSocket(scheme + "://" + location.host + "/chat/" + room + auth);
 
     setStatus("connecting…");
 
@@ -248,7 +233,6 @@
       setStatus("connected", "live");
       socket.send(frame("JOIN", "Joining"));
       setJoined(true);
-      startMemberPolling();
       $("text").focus();
     };
 
@@ -260,19 +244,20 @@
         append("ERROR", event.data);
         return;
       }
-      append(payload.status || "OK", payload.message);
-
-      // membership just changed, so do not wait for the next poll
-      const text = payload.message || "";
-      if (text.endsWith("joined the room") || text.endsWith("left the room")) {
-        refreshMembers();
+      if (payload.status === "PRESENCE") {
+        renderMembers(payload.message);
+        return;
       }
+
+      append(payload.status || "OK", payload.message);
     };
 
-    socket.onclose = () => {
-      setStatus("disconnected", "down");
+    socket.onclose = (event) => {
+      // 1006 with nothing sent usually means the handshake itself was refused,
+      // which is what a missing or wrong token looks like from the browser.
+      setStatus(event.code === 1006 ? "refused - check the token" : "disconnected", "down");
       setJoined(false);
-      stopMemberPolling();
+      renderMembers("");
       socket = null;
     };
 
@@ -300,6 +285,7 @@
   });
 
   setJoined(false);
+  renderMembers("");
 })();
 </script>
 </body>
