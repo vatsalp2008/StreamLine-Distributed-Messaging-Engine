@@ -46,7 +46,7 @@ public class BenchmarkRunner {
         this.messagesPerThread = totalMessages / threads;
     }
 
-    public void run() {
+    public BenchmarkResult run() {
         printConfiguration();
 
         BlockingQueue<ChatMessage> queue = new LinkedBlockingQueue<>(QUEUE_CAPACITY);
@@ -77,7 +77,17 @@ public class BenchmarkRunner {
             pool.shutdown();
         }
 
-        printResults();
+        BenchmarkResult result = result();
+        printResults(result);
+        return result;
+    }
+
+    /**
+     * @return the counters gathered during the run
+     */
+    private BenchmarkResult result() {
+        return new BenchmarkResult(label, successCount.sum(), failCount.sum(),
+                connectionCount.sum(), reconnectCount.sum(), endTime - startTime);
     }
 
     private MSGSenderThread newSender(BlockingQueue<ChatMessage> queue, CountDownLatch latch, int id) {
@@ -113,18 +123,15 @@ public class BenchmarkRunner {
         System.out.println("Building up message queue...");
     }
 
-    private void printResults() {
-        long duration = endTime - startTime;
-        long successes = successCount.sum();
-        double throughput = duration > 0 ? (successes * 1000.0) / duration : 0.0;
-
-        System.out.println("\n---------  " + label + " ----------");
-        System.out.println("Successful messages sent: " + successes);
-        System.out.println("Failed messages: " + failCount.sum());
-        System.out.println("Total runtime: " + duration + " ms");
-        System.out.println("Throughput: " + String.format("%.2f", throughput) + " msg/sec");
-        System.out.println("Total Connections: " + connectionCount.sum());
-        System.out.println("Reconnections: " + reconnectCount.sum());
+    private void printResults(BenchmarkResult result) {
+        System.out.println("\n---------  " + result.label() + " ----------");
+        System.out.println("Successful messages sent: " + result.successes());
+        System.out.println("Failed messages: " + result.failures());
+        System.out.println("Total runtime: " + result.durationMillis() + " ms");
+        System.out.println("Throughput: "
+                + String.format("%.2f", result.throughputPerSecond()) + " msg/sec");
+        System.out.println("Total Connections: " + result.connections());
+        System.out.println("Reconnections: " + result.reconnects());
         System.out.println("-----------------------------------------\n");
     }
 
