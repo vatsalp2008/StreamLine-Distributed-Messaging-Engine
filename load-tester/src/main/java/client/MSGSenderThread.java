@@ -108,7 +108,7 @@ public class MSGSenderThread implements Runnable {
         // Try up to 3 times
         for (int attempt = 1; attempt <= 3; attempt++) {
             try {
-                String url = serverUrl + "/chat/" + roomId;
+                String url = TestConfig.withAuth(serverUrl + "/chat/" + roomId);
                 URI uri = new URI(url);
 
                 client = new WebSocketClient(uri) {

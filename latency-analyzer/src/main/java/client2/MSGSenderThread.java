@@ -98,7 +98,7 @@ public class MSGSenderThread implements Runnable {
     private boolean connect() {
         for (int attempt = 1; attempt <= 3; attempt++) {
             try {
-                String url = serverUrl + "/chat/" + roomId;
+                String url = TestConfig.withAuth(serverUrl + "/chat/" + roomId);
                 URI uri = new URI(url);
 
                 client = new WebSocketClient(uri) {

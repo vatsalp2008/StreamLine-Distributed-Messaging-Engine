@@ -49,6 +49,34 @@ public final class TestConfig {
         return string("streamline.result.dir", "STREAMLINE_RESULT_DIR", "Result");
     }
 
+    /**
+     * @return -String, the shared secret to present, or empty when the server
+     *         under test has access control switched off
+     */
+    public static String authToken() {
+        return string("streamline.token", "STREAMLINE_TOKEN", "");
+    }
+
+    /**
+     * Appends the token to a chat URL when one is configured.
+     *
+     * The token goes in the query string rather than a header because that is
+     * the form the server accepts on a handshake from any client.
+     *
+     * @param chatUrl -String, the ws://host/chat/{room} URL
+     * @return the URL a client should actually connect to
+     */
+    public static String withAuth(String chatUrl) {
+        String token = authToken();
+        if (token.isEmpty()) {
+            return chatUrl;
+        }
+
+        String separator = chatUrl.contains("?") ? "&" : "?";
+        return chatUrl + separator + "token="
+                + java.net.URLEncoder.encode(token, java.nio.charset.StandardCharsets.UTF_8);
+    }
+
     private static String string(String property, String envVar, String fallback) {
         String value = System.getProperty(property);
         if (value == null || value.isBlank()) {
