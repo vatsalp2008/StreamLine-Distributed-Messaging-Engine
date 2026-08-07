@@ -79,6 +79,25 @@ jobs:
       - name: Build and test ${{ matrix.module }}
         run: mvn -B clean verify --file ${{ matrix.module }}/pom.xml
 
+  compose:
+    name: Compose file is valid
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The stack has several profiles; a typo in one of them otherwise only
+      # surfaces when somebody tries to start it.
+      - name: Validate default services
+        run: docker compose config --quiet
+
+      # COMPOSE_PROFILES rather than --profile: the flag is not accepted in that
+      # position by every Compose version, the environment variable is.
+      - name: Validate postgres profile
+        run: COMPOSE_PROFILES=postgres docker compose config --quiet
+
+      - name: Validate bench profile
+        run: COMPOSE_PROFILES=bench docker compose config --quiet
+
   docker:
     name: Docker image builds
     runs-on: ubuntu-latest
