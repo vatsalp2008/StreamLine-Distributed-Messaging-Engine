@@ -1,7 +1,8 @@
 # Local stack: the server on its own, plus an opt-in benchmark client.
 #
-#   docker compose up server              # just the server
+#   docker compose up server              # just the server, on embedded H2
 #   docker compose --profile bench up     # server, then a warm-up benchmark against it
+#   docker compose --profile postgres up  # server backed by Postgres instead of H2
 services:
   server:
     build:
@@ -14,6 +15,9 @@ services:
       BROADCAST_ENABLED: "${BROADCAST_ENABLED:-true}"
       LOG_LEVEL: "${LOG_LEVEL:-INFO}"
       DB_PASSWORD: "${DB_PASSWORD:-}"
+      # Set AUTH_ENABLED=true and AUTH_TOKEN=... to require a token
+      AUTH_ENABLED: "${AUTH_ENABLED:-false}"
+      AUTH_TOKEN: "${AUTH_TOKEN:-}"
     volumes:
       - streamline-data:/app/data
     healthcheck:
@@ -23,6 +27,48 @@ services:
       retries: 5
       start_period: 30s
     restart: unless-stopped
+
+  # The same server image, pointed at Postgres. Flyway applies the same
+  # migrations there, so the two profiles share one schema definition.
+  server-postgres:
+    profiles: ["postgres"]
+    build:
+      context: ./Server
+    image: streamline-server:local
+    ports:
+      - "${SERVER_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: "postgres"
+      DB_URL: "jdbc:postgresql://postgres:5432/streamline"
+      DB_USERNAME: "streamline"
+      DB_PASSWORD: "${DB_PASSWORD:-streamline}"
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  postgres:
+    profiles: ["postgres"]
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: streamline
+      POSTGRES_USER: streamline
+      POSTGRES_PASSWORD: "${DB_PASSWORD:-streamline}"
+    volumes:
+      - streamline-postgres:/var/lib/postgresql/data
+    healthcheck:
+      # the server must not start migrating before the database accepts connections
+      test: ["CMD-SHELL", "pg_isready -U streamline -d streamline"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   # Only starts under the "bench" profile, and waits for the server to be healthy first.
   load-tester:
@@ -40,3 +86,4 @@ services:
 
 volumes:
   streamline-data:
+  streamline-postgres:
