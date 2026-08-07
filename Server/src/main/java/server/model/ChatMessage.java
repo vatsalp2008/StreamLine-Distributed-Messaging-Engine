@@ -11,7 +11,9 @@ import java.time.Instant;
 @Entity
 @Table(name = "messages", indexes = {
         // history replay filters by room and orders by timestamp, so index both together
-        @Index(name = "idx_messages_room_timestamp", columnList = "room_id, timestamp")
+        @Index(name = "idx_messages_room_timestamp", columnList = "room_id, timestamp"),
+        // author-scoped search would otherwise scan every row in the room
+        @Index(name = "idx_messages_room_username", columnList = "room_id, username")
 })
 public class ChatMessage {
 
