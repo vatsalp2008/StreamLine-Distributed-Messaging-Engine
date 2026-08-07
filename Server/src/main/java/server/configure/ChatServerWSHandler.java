@@ -30,6 +30,9 @@ public class ChatServerWSHandler implements WebSocketHandler {
     /** Fallback room used when the handshake URI carries no usable room id */
     static final String UNKNOWN_ROOM = "unknown";
 
+    /** Status of a frame announcing who is in the room */
+    static final String PRESENCE = "PRESENCE";
+
     /** Message types accepted by the protocol */
     private static final String JOIN = "JOIN";
     private static final String LEAVE = "LEAVE";
@@ -165,6 +168,13 @@ public class ChatServerWSHandler implements WebSocketHandler {
                 metrics.recordAccepted();
                 sendResponse(session, "OK", formattedMessage);
                 broadcast(roomId, session, formattedMessage);
+
+                // JOIN and LEAVE change who is present, so push the new member
+                // list rather than making clients poll for it
+                String type = chatMessage.getMessageType();
+                if (JOIN.equals(type) || LEAVE.equals(type)) {
+                    announcePresence(roomId);
+                }
             } else {
                 // the type handler already answered with an ERROR
                 metrics.recordRejected();
@@ -269,7 +279,10 @@ public class ChatServerWSHandler implements WebSocketHandler {
 
         Set<String> names = new TreeSet<>();
         for (WebSocketSession session : sessions) {
-            String username = sessionUsernames.get(session.getId());
+            // a session id is never null in practice, but this runs on the
+            // message path and a lookup must not be able to throw
+            String id = session.getId();
+            String username = id == null ? null : sessionUsernames.get(id);
             if (username != null) {
                 names.add(username);
             }
@@ -312,6 +325,26 @@ public class ChatServerWSHandler implements WebSocketHandler {
                         rateLimitSettings.getBurstSize()));
 
         return limiter.tryAcquire();
+    }
+
+    /**
+     * Tells everyone in a room who is currently present.
+     *
+     * Sent to the whole room including the originator, because a client needs
+     * the list on its own join, when no one else would tell it.
+     *
+     * @param roomId -String, Representing the room whose membership changed
+     */
+    private void announcePresence(String roomId) {
+        CopyOnWriteArrayList<WebSocketSession> roomSessions = chatRooms.get(roomId);
+        if (roomSessions == null || roomSessions.isEmpty()) {
+            return;
+        }
+
+        String members = String.join(",", getRoomMembers(roomId));
+        for (WebSocketSession peer : roomSessions) {
+            sendResponse(peer, PRESENCE, members);
+        }
     }
 
     /**
@@ -398,6 +431,8 @@ public class ChatServerWSHandler implements WebSocketHandler {
 
         joinedSessions.remove(session);
         forgetUsername(session);
+        // a dropped connection changes membership just as a LEAVE does
+        announcePresence(roomId);
         // buckets are keyed by session id, so drop this one or the map grows forever
         if (session.getId() != null) {
             rateLimiters.remove(session.getId());

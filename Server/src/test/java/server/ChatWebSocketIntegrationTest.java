@@ -57,22 +57,42 @@ class ChatWebSocketIntegrationTest {
         }
 
         /**
-         * Reads past any replayed history to the acknowledgement.
-         * How many HISTORY frames precede the ack depends on what earlier tests left
-         * in the shared in-memory database, so the count is not fixed.
+         * Reads past informational frames to the next acknowledgement or delivery.
+         *
+         * HISTORY and PRESENCE arrive unpredictably: how much history a room has
+         * depends on what earlier tests left in the shared database, and a
+         * PRESENCE frame is emitted whenever anyone joins or leaves. Neither is
+         * what these tests are asserting on.
          */
         JsonNode nextAck() throws Exception {
             for (int i = 0; i < 60; i++) {
                 JsonNode frame = nextFrame();
-                if (!"HISTORY".equals(frame.get("status").asText())) {
+                String status = frame.get("status").asText();
+                if (!"HISTORY".equals(status) && !"PRESENCE".equals(status)) {
                     return frame;
                 }
             }
             throw new AssertionError("only history frames arrived, never an acknowledgement");
         }
 
-        boolean receivedNothingWithin(long millis) throws Exception {
-            return frames.poll(millis, TimeUnit.MILLISECONDS) == null;
+        /**
+         * True when no chat traffic arrives in the window.
+         *
+         * PRESENCE frames are not chat: a client gets them for its own room's
+         * membership, so their absence is not what "did not receive the other
+         * room's message" means.
+         */
+        boolean receivedNoChatWithin(long millis) throws Exception {
+            long deadline = System.currentTimeMillis() + millis;
+            String payload;
+            while ((payload = frames.poll(Math.max(deadline - System.currentTimeMillis(), 0),
+                    TimeUnit.MILLISECONDS)) != null) {
+                String status = MAPPER.readTree(payload).get("status").asText();
+                if (!"PRESENCE".equals(status) && !"HISTORY".equals(status)) {
+                    return false;
+                }
+            }
+            return true;
         }
 
         void close() throws Exception {
@@ -186,7 +206,7 @@ class ChatWebSocketIntegrationTest {
             alice.send(frame("alice", "private to room a", "TEXT"));
             assertThat(alice.nextAck().get("status").asText()).isEqualTo("OK");
 
-            assertThat(bob.receivedNothingWithin(750)).isTrue();
+            assertThat(bob.receivedNoChatWithin(750)).isTrue();
         } finally {
             alice.close();
             bob.close();

@@ -76,8 +76,30 @@ class ChatServerWSHandlerTest {
         return frames;
     }
 
+    /** Only the fan-out frames, ignoring acknowledgements and presence updates. */
+    private List<JsonNode> broadcastsTo(WebSocketSession session) throws IOException {
+        return sentFrames(session).stream()
+                .filter(frame -> "BROADCAST".equals(frame.get("status").asText()))
+                .toList();
+    }
+
+    /** Frames that carry presence updates rather than chat. */
+    private List<JsonNode> presenceFramesTo(WebSocketSession session) throws IOException {
+        return sentFrames(session).stream()
+                .filter(frame -> "PRESENCE".equals(frame.get("status").asText()))
+                .toList();
+    }
+
+    /**
+     * The last frame that answers the caller's message.
+     *
+     * A PRESENCE update follows every join and leave, so the raw last frame is
+     * often the membership list rather than the acknowledgement being asserted on.
+     */
     private JsonNode lastFrame(WebSocketSession session) throws IOException {
-        List<JsonNode> frames = sentFrames(session);
+        List<JsonNode> frames = sentFrames(session).stream()
+                .filter(frame -> !"PRESENCE".equals(frame.get("status").asText()))
+                .toList();
         return frames.get(frames.size() - 1);
     }
 
@@ -233,7 +255,9 @@ class ChatServerWSHandlerTest {
 
         send(session, payload("alice", "Joining", "JOIN"));
 
-        List<JsonNode> frames = sentFrames(session);
+        List<JsonNode> frames = sentFrames(session).stream()
+                .filter(frame -> !"PRESENCE".equals(frame.get("status").asText()))
+                .toList();
         assertThat(frames).hasSize(3);
         assertThat(frames.get(0).get("status").asText()).isEqualTo("HISTORY");
         assertThat(frames.get(0).get("message").asText()).isEqualTo("carol: oldest");
@@ -276,8 +300,8 @@ class ChatServerWSHandlerTest {
         send(bob, payload("bob", "Joining", "JOIN"));
         send(alice, payload("alice", "room one only", "TEXT"));
 
-        // bob only ever saw his own join acknowledgement
-        assertThat(sentFrames(bob)).hasSize(1);
+        // nothing from room one ever reached bob
+        assertThat(broadcastsTo(bob)).isEmpty();
     }
 
     @Test
@@ -290,7 +314,7 @@ class ChatServerWSHandlerTest {
         send(bob, payload("bob", "Joining", "JOIN"));
         send(alice, payload("alice", "hello room", "TEXT"));
 
-        assertThat(sentFrames(bob)).hasSize(1);
+        assertThat(broadcastsTo(bob)).isEmpty();
     }
 
     // ---------- lifecycle robustness ----------
