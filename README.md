@@ -76,7 +76,11 @@ A client must `JOIN` before it may send `TEXT` or `LEAVE`. Every frame is answer
 | `OK` | Acknowledgement to the sender |
 | `BROADCAST` | A message from another member of the room |
 | `HISTORY` | A replayed past message, sent oldest first on join |
+| `PRESENCE` | Comma-separated list of everyone currently in the room |
 | `ERROR` | Validation failure or protocol violation |
+
+A `PRESENCE` frame is pushed to every member whenever someone joins, leaves, or
+disconnects, so clients never poll for the member list.
 
 ## Browser client
 
@@ -95,6 +99,7 @@ server can be exercised without any extra tooling.
 | `GET /api/rooms` | Rooms with at least one member, with stored message counts |
 | `GET /api/rooms/{roomId}` | One room: members present, sessions, stored messages |
 | `GET /api/rooms/{roomId}/messages` | Paginated room history, newest first |
+| `GET /api/rooms/{roomId}/search` | Search a room's history by text and optionally author |
 | `GET /swagger-ui.html` | Interactive API documentation |
 | `GET /v3/api-docs` | OpenAPI document |
 | `GET /actuator/health` | Actuator health, including database status |
@@ -146,6 +151,44 @@ body:
   "timestamp": "2026-08-06T10:00:00Z" }
 ```
 
+## Access control
+
+Disabled by default, so nothing changes until it is switched on:
+
+```bash
+AUTH_ENABLED=true AUTH_TOKEN=a-long-random-secret mvn spring-boot:run
+```
+
+With it enabled, every `/api` call, the OpenAPI document, and every WebSocket
+handshake must present the token. Startup fails if the token is missing or
+shorter than 16 characters, rather than running while believing it is protected.
+
+| Where | How to present it |
+| --- | --- |
+| REST | `X-Streamline-Token: <token>` header, or `?token=<token>` |
+| WebSocket | `?token=<token>` on the handshake URL |
+| Benchmark clients | `-Dstreamline.token=<token>` or `STREAMLINE_TOKEN` |
+| Browser client | The token field in the header bar |
+
+`/health` and `/ready` deliberately stay open so load balancer probes keep
+working; `/actuator` is protected unless `AUTH_PROTECT_ACTUATOR=false`.
+
+## Storage
+
+Schema is managed by Flyway (`Server/src/main/resources/db/migration`), and
+Hibernate runs with `ddl-auto=validate`, so the server refuses to start if the
+entities and the migrations have drifted apart.
+
+The default is embedded H2. For Postgres:
+
+```bash
+SPRING_PROFILES_ACTIVE=postgres DB_URL=jdbc:postgresql://localhost:5432/streamline \
+  DB_USERNAME=streamline DB_PASSWORD=streamline mvn spring-boot:run
+
+# or the whole stack, database included
+docker compose --profile postgres up
+```
+
 ## Running the server
 
 ```bash
@@ -175,6 +218,14 @@ Every setting has a working default; override through environment variables.
 | `PERSIST_CORE_POOL` | `8` | Core persistence threads |
 | `PERSIST_MAX_POOL` | `32` | Max persistence threads |
 | `PERSIST_QUEUE_CAPACITY` | `10000` | Queued writes before back pressure |
+| `AUTH_ENABLED` | `false` | Require a token on the API and chat handshake |
+| `AUTH_TOKEN` | empty | The shared secret; at least 16 characters when enabled |
+| `AUTH_HEADER` | `X-Streamline-Token` | Header carrying the token |
+| `AUTH_QUERY_PARAM` | `token` | Query parameter accepted instead of the header |
+| `AUTH_PROTECT_ACTUATOR` | `true` | Also require the token on `/actuator` |
+| `RATE_LIMIT_ENABLED` | `false` | Cap how fast one session may send |
+| `RATE_LIMIT_PER_SECOND` | `20` | Sustained messages per second per session |
+| `RATE_LIMIT_BURST` | `40` | Burst allowance above the sustained rate |
 | `RATE_LIMIT_ENABLED` | `false` | Per-session send limiting |
 | `RATE_LIMIT_PER_SECOND` | `20` | Sustained messages per second per session |
 | `RATE_LIMIT_BURST` | `40` | How far a session may burst above that rate |
