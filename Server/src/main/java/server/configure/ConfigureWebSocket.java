@@ -19,14 +19,19 @@ public class ConfigureWebSocket implements WebSocketConfigurer {
 
     private final StreamlineProperties properties;
 
+    /** Rejects unauthenticated handshakes before a session is created. */
+    private final TokenHandshakeInterceptor tokenInterceptor;
+
     /**
      * Constructor - Spring will inject the handler and settings
      * @param handler    Represents the handler that manages WebSocket connections and msgs
      * @param properties Represents the streamline.* settings
      */
-    public ConfigureWebSocket(ChatServerWSHandler handler, StreamlineProperties properties) {
+    public ConfigureWebSocket(ChatServerWSHandler handler, StreamlineProperties properties,
+            TokenHandshakeInterceptor tokenInterceptor) {
         this.handler = handler;
         this.properties = properties;
+        this.tokenInterceptor = tokenInterceptor;
     }
 
     /**
@@ -37,6 +42,7 @@ public class ConfigureWebSocket implements WebSocketConfigurer {
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry endpoints) {
         endpoints.addHandler(handler, "/chat/{roomId}")
+                .addInterceptors(tokenInterceptor)
                 .setAllowedOrigins(properties.getWs().getAllowedOrigins());
     }
 
