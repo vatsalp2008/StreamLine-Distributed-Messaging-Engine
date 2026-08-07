@@ -87,8 +87,13 @@ public class MSGSenderThread implements Runnable {
 
             System.out.println("Thread " + ThreadNumber + ": Sent " + sent + " messages");
 
-        } catch (Exception e) {
-            System.err.println("Thread-" + ThreadNumber + " error: " + e.getMessage());
+        } catch (Throwable t) {
+            // Throwable, not Exception: a worker that dies from an Error (a missing
+            // method after a stale build, an OOM) otherwise vanishes silently,
+            // because submit() parks it in a Future nobody reads and the run just
+            // reports zero traffic with no explanation.
+            System.err.println("Thread-" + ThreadNumber + " failed: "
+                    + t.getClass().getSimpleName() + ": " + t.getMessage());
         } finally {
             cleanup();
             latch.countDown();
