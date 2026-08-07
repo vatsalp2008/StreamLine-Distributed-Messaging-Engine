@@ -16,6 +16,7 @@ public class StreamlineProperties {
     private final Persistence persistence = new Persistence();
     private final Ws ws = new Ws();
     private final RateLimit rateLimit = new RateLimit();
+    private final Auth auth = new Auth();
 
     public Broadcast getBroadcast() {
         return broadcast;
@@ -23,6 +24,10 @@ public class StreamlineProperties {
 
     public RateLimit getRateLimit() {
         return rateLimit;
+    }
+
+    public Auth getAuth() {
+        return auth;
     }
 
     public Persistence getPersistence() {
@@ -44,6 +49,76 @@ public class StreamlineProperties {
 
         public void setEnabled(boolean enabled) {
             this.enabled = enabled;
+        }
+    }
+
+    /**
+     * Shared-secret access control.
+     *
+     * Off by default: turning it on without warning would break every existing
+     * deployment and both benchmark clients. Enable it, set a token, and every
+     * WebSocket handshake and API call must present that token.
+     */
+    public static class Auth {
+        private boolean enabled = false;
+
+        /**
+         * The shared secret. Required when auth is enabled; startup fails rather
+         * than silently accepting everything if it is missing.
+         */
+        private String token = "";
+
+        /** Header carrying the token on REST calls and WebSocket handshakes. */
+        private String header = "X-Streamline-Token";
+
+        /**
+         * Query parameter accepted as a fallback on the WebSocket handshake.
+         * Browsers cannot set headers on a WebSocket handshake, so the parameter
+         * is the only way a browser client can authenticate.
+         */
+        private String queryParam = "token";
+
+        /** Leave the probes open so a load balancer can reach them unauthenticated. */
+        private boolean protectActuator = true;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public String getToken() {
+            return token;
+        }
+
+        public void setToken(String token) {
+            this.token = token;
+        }
+
+        public String getHeader() {
+            return header;
+        }
+
+        public void setHeader(String header) {
+            this.header = header;
+        }
+
+        public String getQueryParam() {
+            return queryParam;
+        }
+
+        public void setQueryParam(String queryParam) {
+            this.queryParam = queryParam;
+        }
+
+        public boolean isProtectActuator() {
+            return protectActuator;
+        }
+
+        public void setProtectActuator(boolean protectActuator) {
+            this.protectActuator = protectActuator;
         }
     }
 
