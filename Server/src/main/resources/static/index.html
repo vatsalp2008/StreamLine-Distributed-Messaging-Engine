@@ -118,6 +118,12 @@
     background: var(--panel);
   }
   #text { flex: 1; }
+  #searchBar { display: flex; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  #searchBar input { flex: 1; }
+  #searchResults { padding: 0 16px; }
+  #searchResults .hit { display: flex; gap: 8px; padding: 3px 0; }
+  #searchResults .who { color: var(--accent); flex-shrink: 0; }
+  #searchResults .none { color: var(--muted); padding: 6px 0; }
 </style>
 </head>
 <body>
@@ -132,7 +138,14 @@
 </header>
 
 <div id="main">
-  <div id="log"></div>
+  <div style="flex:1; display:flex; flex-direction:column; min-height:0;">
+    <div id="searchBar">
+      <input id="query" placeholder="Search this room's history" maxlength="200">
+      <button id="searchBtn" class="secondary">Search</button>
+      <button id="clearBtn" class="secondary">Clear</button>
+    </div>
+    <div id="log"></div>
+  </div>
   <aside id="members">
     <h2>Members</h2>
     <ul id="memberList"></ul>
@@ -282,6 +295,54 @@
   $("send").addEventListener("click", send);
   $("text").addEventListener("keydown", (e) => {
     if (e.key === "Enter") send();
+  });
+
+  // ---- history search, over the REST API rather than the socket ----
+
+  function authHeaders() {
+    const token = $("token").value.trim();
+    return token ? { "X-Streamline-Token": token } : {};
+  }
+
+  async function runSearch() {
+    const q = $("query").value.trim();
+    if (!q) return;
+
+    const room = encodeURIComponent($("room").value.trim() || "1");
+    const url = "/api/rooms/" + room + "/search?q=" + encodeURIComponent(q) + "&size=50";
+
+    log.innerHTML = "";
+    try {
+      const response = await fetch(url, { headers: authHeaders() });
+      if (!response.ok) {
+        append("ERROR", "Search failed: " + response.status
+          + (response.status === 401 ? " (token required)" : ""));
+        return;
+      }
+
+      const page = await response.json();
+      if (page.messages.length === 0) {
+        append("OK", "No messages match \"" + q + "\"");
+        return;
+      }
+
+      // results are newest first; show them oldest first so they read like chat
+      for (const msg of page.messages.slice().reverse()) {
+        append("HISTORY", msg.username + ": " + msg.message);
+      }
+      append("OK", "Found " + page.totalMessages + " match(es)");
+    } catch (e) {
+      append("ERROR", "Search failed: " + e.message);
+    }
+  }
+
+  $("searchBtn").addEventListener("click", runSearch);
+  $("query").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") runSearch();
+  });
+  $("clearBtn").addEventListener("click", () => {
+    $("query").value = "";
+    log.innerHTML = "";
   });
 
   setJoined(false);
