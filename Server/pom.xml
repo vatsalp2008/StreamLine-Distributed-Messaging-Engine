@@ -51,6 +51,12 @@
 			<scope>runtime</scope>
 		</dependency>
 
+		<!-- Versioned schema migrations; the schema is no longer inferred -->
+		<dependency>
+			<groupId>org.flywaydb</groupId>
+			<artifactId>flyway-core</artifactId>
+		</dependency>
+
 		<!-- Health, metrics and diagnostics endpoints -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
