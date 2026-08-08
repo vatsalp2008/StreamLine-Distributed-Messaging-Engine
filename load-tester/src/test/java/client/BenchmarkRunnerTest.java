@@ -13,6 +13,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.LongAdder;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -168,5 +169,36 @@ class BenchmarkRunnerTest {
         // 20 messages over 5 threads is 4 each, so all 20 still land
         assertEquals(20, result.successes());
         assertEquals(5, result.connections());
+    }
+
+    @Test
+    void aFullyAcknowledgedRunIsClean() {
+        BenchmarkResult result = new BenchmarkResult("test", 100, 0, 4, 0, 1000);
+
+        assertTrue(result.isClean());
+        assertEquals(1.0, result.successRate(), 0.0001);
+    }
+
+    @Test
+    void aPartiallyRefusedRunIsNotClean() {
+        BenchmarkResult result = new BenchmarkResult("test", 60, 40, 4, 0, 1000);
+
+        assertFalse(result.isClean());
+        assertEquals(0.6, result.successRate(), 0.0001);
+    }
+
+    @Test
+    void aRunThatSentNothingIsNotClean() {
+        BenchmarkResult result = new BenchmarkResult("test", 0, 0, 0, 0, 0);
+
+        assertFalse(result.isClean());
+        assertEquals(0.0, result.successRate(), 0.0001);
+    }
+
+    @Test
+    void aRealRunAgainstAWorkingServerIsClean() throws Exception {
+        StubChatServer stub = startServer();
+
+        assertTrue(new BenchmarkRunner("test", stub.url(), 2, 20).run().isClean());
     }
 }

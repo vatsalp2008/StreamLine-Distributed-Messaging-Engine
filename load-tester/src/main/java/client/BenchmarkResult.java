@@ -22,6 +22,28 @@ public record BenchmarkResult(
         long durationMillis) {
 
     /**
+     * @return messages the server acknowledged, as a fraction of those attempted
+     */
+    public double successRate() {
+        long attempted = successes + failures;
+        return attempted == 0 ? 0.0 : (double) successes / attempted;
+    }
+
+    /**
+     * Whether the run is a usable measurement.
+     *
+     * A partially refused run still produces a throughput figure, and that
+     * figure describes nothing meaningful: the refused messages were never
+     * processed. Callers should treat a false here as "fix the run, then
+     * measure", not as a slightly worse number.
+     *
+     * @return true when every attempted message was acknowledged
+     */
+    public boolean isClean() {
+        return failures == 0 && successes > 0;
+    }
+
+    /**
      * @return acknowledged messages per second, or 0 when the run was too short
      *         to measure
      */

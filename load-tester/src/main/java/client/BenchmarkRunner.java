@@ -132,6 +132,17 @@ public class BenchmarkRunner {
                 + String.format("%.2f", result.throughputPerSecond()) + " msg/sec");
         System.out.println("Total Connections: " + result.connections());
         System.out.println("Reconnections: " + result.reconnects());
+        if (!result.isClean()) {
+            // Loud, because a throughput number from a partially refused run
+            // describes nothing: those messages were never processed.
+            System.out.println();
+            System.out.println("  !! " + result.failures() + " of "
+                    + (result.successes() + result.failures())
+                    + " messages were not acknowledged ("
+                    + String.format("%.1f%%", result.successRate() * 100)
+                    + " accepted).");
+            System.out.println("  !! The throughput above is not a valid measurement.");
+        }
         System.out.println("-----------------------------------------\n");
     }
 
