@@ -47,9 +47,9 @@ public class ChatMessage {
     private Instant timestamp;
 
     @NotNull
-    @Pattern(regexp = "TEXT|JOIN|LEAVE")
+    @Pattern(regexp = "TEXT|JOIN|LEAVE|TYPING")
     @Column(nullable = false, length = 10)
-    private String messageType; // Type of message: TEXT, JOIN, or LEAVE
+    private String messageType; // Type of message: TEXT, JOIN, LEAVE or TYPING
 
     @Column(name = "room_id", length = 64)
     private String roomId;

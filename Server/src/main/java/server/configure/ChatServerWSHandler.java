@@ -33,10 +33,14 @@ public class ChatServerWSHandler implements WebSocketHandler {
     /** Status of a frame announcing who is in the room */
     static final String PRESENCE = "PRESENCE";
 
+    /** Status of a frame announcing that someone is composing a message */
+    static final String TYPING_STATUS = "TYPING";
+
     /** Message types accepted by the protocol */
     private static final String JOIN = "JOIN";
     private static final String LEAVE = "LEAVE";
     private static final String TEXT = "TEXT";
+    private static final String TYPING = "TYPING";
 
     private final ObjectMapper objectMapperMSG;
     private final Validator validator;
@@ -259,6 +263,17 @@ public class ChatServerWSHandler implements WebSocketHandler {
                 }
                 return chatMessage.getUsername() + ": " + chatMessage.getMessage();
 
+            case TYPING:
+                if (!joinedSessions.contains(session)) {
+                    sendResponse(session, "ERROR", "You must JOIN before sending TYPING");
+                    return null;
+                }
+
+                // Transient by design: never stored, never echoed to the sender,
+                // and returns null so the caller does not also fan it out as chat.
+                announceTyping(roomId, session, chatMessage.getUsername());
+                return null;
+
             default:
                 sendResponse(session, "ERROR", "Unknown message type");
                 return null;
@@ -386,6 +401,26 @@ public class ChatServerWSHandler implements WebSocketHandler {
      */
     private boolean isNameTakenInRoom(String roomId, String username) {
         return getRoomMembers(roomId).contains(username);
+    }
+
+    /**
+     * Tells the rest of the room that someone is composing a message.
+     *
+     * @param roomId   -String, Representing the room
+     * @param sender   -WebSocketSession, the composing session, which is skipped
+     * @param username -String, who is typing
+     */
+    private void announceTyping(String roomId, WebSocketSession sender, String username) {
+        CopyOnWriteArrayList<WebSocketSession> roomSessions = chatRooms.get(roomId);
+        if (roomSessions == null) {
+            return;
+        }
+
+        for (WebSocketSession peer : roomSessions) {
+            if (!peer.equals(sender)) {
+                sendResponse(peer, TYPING_STATUS, username);
+            }
+        }
     }
 
     /**
