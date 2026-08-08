@@ -264,7 +264,13 @@ Alongside the JVM and HTTP metrics Actuator provides:
 | `streamline.messages.accepted` | Frames that passed validation and were processed |
 | `streamline.messages.rejected` | Frames refused for validation or protocol reasons |
 | `streamline.messages.rate_limited` | Frames dropped for exceeding the send rate |
+| `streamline.messages.identity_rejected` | Frames refused for claiming the wrong username |
+| `streamline.typing.sent` | Typing hints delivered to room members |
 | `streamline.broadcasts.sent` | Copies delivered to other room members |
+
+`streamline.messages.identity_rejected` also rolls up into
+`streamline.messages.rejected`; a rising rate on the specific counter means
+someone is probing rather than mistyping.
 
 Set `BROADCAST_ENABLED=false` when benchmarking, so measured latency reflects only the
 sender's acknowledgement rather than fan-out traffic.
