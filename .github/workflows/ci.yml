@@ -79,6 +79,33 @@ jobs:
       - name: Build and test ${{ matrix.module }}
         run: mvn -B clean verify --file ${{ matrix.module }}/pom.xml
 
+  smoke:
+    name: End-to-end smoke run
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      # Starts the real server and drives it with the real client. The unit
+      # tests cover each side in isolation; this is what catches the two halves
+      # disagreeing about the protocol, which no amount of mocking would.
+      - name: Server accepts every benchmark message
+        run: make smoke
+
+      - name: Upload smoke logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-logs
+          path: target/smoke/
+          if-no-files-found: ignore
+
   compose:
     name: Compose file is valid
     runs-on: ubuntu-latest
