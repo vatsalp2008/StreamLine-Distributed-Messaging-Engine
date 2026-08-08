@@ -18,6 +18,10 @@ services:
       # Set AUTH_ENABLED=true and AUTH_TOKEN=... to require a token
       AUTH_ENABLED: "${AUTH_ENABLED:-false}"
       AUTH_TOKEN: "${AUTH_TOKEN:-}"
+      # A session is held to the username it joined with. Set false only for a
+      # load generator that reuses one connection for many synthetic authors.
+      IDENTITY_STRICT: "${IDENTITY_STRICT:-true}"
+      IDENTITY_UNIQUE: "${IDENTITY_UNIQUE:-true}"
     volumes:
       - streamline-data:/app/data
     healthcheck:
