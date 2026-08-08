@@ -25,10 +25,11 @@ class RoomPresenceTest {
     private static final AtomicInteger SESSION_IDS = new AtomicInteger();
 
     private ChatServerWSHandler handler;
+    private Validator validator;
 
     @BeforeEach
     void setUp() {
-        Validator validator = Validation.buildDefaultValidatorFactory().getValidator();
+        validator = Validation.buildDefaultValidatorFactory().getValidator();
         handler = new ChatServerWSHandler(validator, mock(ChatService.class), true,
                 JsonMapper.builder().addModule(new JavaTimeModule()).build(),
                 new StreamlineProperties.RateLimit(),
@@ -80,7 +81,25 @@ class RoomPresenceTest {
     }
 
     @Test
-    void theSameUsernameConnectedTwiceIsListedOnce() throws IOException {
+    void aSecondConnectionCannotClaimAUsernameAlreadyInTheRoom() throws IOException {
+        send(session("general"), "alice", "JOIN");
+        send(session("general"), "alice", "JOIN");
+
+        // usernames are unique per room by default, so the second JOIN is refused
+        assertThat(handler.getRoomMembers("general")).containsExactly("alice");
+        assertThat(handler.getRoomOccupancy()).containsEntry("general", 1);
+    }
+
+    @Test
+    void duplicateUsernamesCollapseWhenUniquenessIsDisabled() throws IOException {
+        StreamlineProperties.Identity permissive = new StreamlineProperties.Identity();
+        permissive.setUniqueUsernames(false);
+        handler = new ChatServerWSHandler(validator, mock(ChatService.class), true,
+                JsonMapper.builder().addModule(new JavaTimeModule()).build(),
+                new StreamlineProperties.RateLimit(),
+                new ChatMetrics(new SimpleMeterRegistry()),
+                permissive);
+
         send(session("general"), "alice", "JOIN");
         send(session("general"), "alice", "JOIN");
 

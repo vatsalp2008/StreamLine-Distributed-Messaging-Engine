@@ -17,6 +17,7 @@ public class StreamlineProperties {
     private final Ws ws = new Ws();
     private final RateLimit rateLimit = new RateLimit();
     private final Auth auth = new Auth();
+    private final Identity identity = new Identity();
 
     public Broadcast getBroadcast() {
         return broadcast;
@@ -28,6 +29,10 @@ public class StreamlineProperties {
 
     public Auth getAuth() {
         return auth;
+    }
+
+    public Identity getIdentity() {
+        return identity;
     }
 
     public Persistence getPersistence() {
@@ -119,6 +124,37 @@ public class StreamlineProperties {
 
         public void setProtectActuator(boolean protectActuator) {
             this.protectActuator = protectActuator;
+        }
+    }
+
+    /**
+     * How strictly a session is held to the username it joined with.
+     *
+     * On by default: this is a protocol correctness property rather than a
+     * deployment policy. Without it a single connection can claim a different
+     * author on every frame, so nothing in a room's history can be trusted.
+     */
+    public static class Identity {
+        /** Reject frames whose username differs from the one used to JOIN. */
+        private boolean strict = true;
+
+        /** Reject a JOIN for a username already present in the room. */
+        private boolean uniqueUsernames = true;
+
+        public boolean isStrict() {
+            return strict;
+        }
+
+        public void setStrict(boolean strict) {
+            this.strict = strict;
+        }
+
+        public boolean isUniqueUsernames() {
+            return uniqueUsernames;
+        }
+
+        public void setUniqueUsernames(boolean uniqueUsernames) {
+            this.uniqueUsernames = uniqueUsernames;
         }
     }
 

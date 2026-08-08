@@ -63,6 +63,9 @@ public class ChatServerWSHandler implements WebSocketHandler {
 
     /** Per-session send limits; empty when rate limiting is disabled. */
     private final StreamlineProperties.RateLimit rateLimitSettings;
+
+    /** How strictly a session is held to the username it joined with. */
+    private final StreamlineProperties.Identity identitySettings;
     private final ChatMetrics metrics;
     private final ConcurrentHashMap<String, RateLimiter> rateLimiters = new ConcurrentHashMap<>();
 
@@ -70,7 +73,7 @@ public class ChatServerWSHandler implements WebSocketHandler {
     public ChatServerWSHandler(Validator validator, ChatService chatService,
             StreamlineProperties properties, ObjectMapper objectMapper, ChatMetrics metrics) {
         this(validator, chatService, properties.getBroadcast().isEnabled(), objectMapper,
-                properties.getRateLimit(), metrics);
+                properties.getRateLimit(), metrics, properties.getIdentity());
     }
 
     /** Direct constructor, used by tests that do not need a properties object. */
@@ -88,6 +91,14 @@ public class ChatServerWSHandler implements WebSocketHandler {
     ChatServerWSHandler(Validator validator, ChatService chatService, boolean broadcastEnabled,
             ObjectMapper objectMapper, StreamlineProperties.RateLimit rateLimitSettings,
             ChatMetrics metrics) {
+        this(validator, chatService, broadcastEnabled, objectMapper, rateLimitSettings, metrics,
+                new StreamlineProperties.Identity());
+    }
+
+    ChatServerWSHandler(Validator validator, ChatService chatService, boolean broadcastEnabled,
+            ObjectMapper objectMapper, StreamlineProperties.RateLimit rateLimitSettings,
+            ChatMetrics metrics, StreamlineProperties.Identity identitySettings) {
+        this.identitySettings = identitySettings;
         this.validator = validator;
         this.chatService = chatService;
         this.broadcastEnabled = broadcastEnabled;
@@ -150,6 +161,13 @@ public class ChatServerWSHandler implements WebSocketHandler {
             }
 
             String roomId = getRoomId(session);
+
+            String identityProblem = identityProblem(session, roomId, chatMessage);
+            if (identityProblem != null) {
+                metrics.recordRejected();
+                sendResponse(session, "ERROR", identityProblem);
+                return;
+            }
 
             // Only chat content is durable. JOIN and LEAVE are connection control
             // frames: storing them replayed "alice: Joining" back as room history, and
@@ -325,6 +343,49 @@ public class ChatServerWSHandler implements WebSocketHandler {
                         rateLimitSettings.getBurstSize()));
 
         return limiter.tryAcquire();
+    }
+
+    /**
+     * Checks that a frame is consistent with the identity the session joined under.
+     *
+     * @return the reason to refuse the frame, or null when it is acceptable
+     */
+    private String identityProblem(WebSocketSession session, String roomId, ChatMessage message) {
+        if (!identitySettings.isStrict()) {
+            return null;
+        }
+
+        String claimed = message.getUsername();
+
+        if (JOIN.equals(message.getMessageType())) {
+            if (identitySettings.isUniqueUsernames() && isNameTakenInRoom(roomId, claimed)) {
+                return "Username '" + claimed + "' is already in use in this room";
+            }
+            return null;
+        }
+
+        // Everything after JOIN must come from the identity that joined. Without
+        // this a single connection can attribute messages to anyone it likes.
+        String bound = boundUsername(session);
+        if (bound != null && !bound.equals(claimed)) {
+            return "Username does not match the session; joined as '" + bound + "'";
+        }
+        return null;
+    }
+
+    /**
+     * @return the username this session joined with, or null if it has not joined
+     */
+    private String boundUsername(WebSocketSession session) {
+        String id = session.getId();
+        return id == null ? null : sessionUsernames.get(id);
+    }
+
+    /**
+     * @return true when someone in the room already holds this username
+     */
+    private boolean isNameTakenInRoom(String roomId, String username) {
+        return getRoomMembers(roomId).contains(username);
     }
 
     /**
