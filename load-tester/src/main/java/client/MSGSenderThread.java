@@ -34,6 +34,9 @@ public class MSGSenderThread implements Runnable {
     private CountDownLatch responseLatch;
     private volatile boolean gotResponse;
 
+    /** Whether the last frame was an acknowledgement rather than a refusal. */
+    private volatile boolean responseAccepted;
+
     /**
      * @param url -String, Representing URL
      * @param queue -BlockingQueue<ChatMessage>, Representing the queue for msg
@@ -125,6 +128,9 @@ public class MSGSenderThread implements Runnable {
 
                     @Override
                     public void onMessage(String message) {
+                        // A refusal is still a reply. Counting it as success made a
+                        // run where every message was rejected report 100% throughput.
+                        responseAccepted = bench.ServerResponse.isAccepted(message);
                         // Server response received - wake up waiting thread!
                         gotResponse = true;
                         if (responseLatch != null) {
@@ -200,6 +206,7 @@ public class MSGSenderThread implements Runnable {
                 // Prepare to wait for response
                 responseLatch = new CountDownLatch(1);
                 gotResponse = false;
+                responseAccepted = false;
 
                 // Send the message
                 client.send(msg.toJson());
@@ -211,7 +218,7 @@ public class MSGSenderThread implements Runnable {
                 );
 
                 // Check for the response if success then return true
-                if (receivedResponse && gotResponse) {
+                if (receivedResponse && gotResponse && responseAccepted) {
                     return true;
                 }
 

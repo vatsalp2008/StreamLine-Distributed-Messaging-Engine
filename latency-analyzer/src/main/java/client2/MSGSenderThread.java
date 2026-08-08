@@ -34,6 +34,9 @@ public class MSGSenderThread implements Runnable {
 
     private CountDownLatch responseLatch;
     private volatile boolean gotResponse;
+
+    /** Whether the last frame was an acknowledgement rather than a refusal. */
+    private volatile boolean responseAccepted;
     private volatile String serverResponse;
     private ArrayList<MessageData> messageDataList;
 
@@ -115,6 +118,9 @@ public class MSGSenderThread implements Runnable {
 
                     @Override
                     public void onMessage(String message) {
+                        // A refusal is still a reply. Counting it as success made a
+                        // run where every message was rejected report 100% throughput.
+                        responseAccepted = bench.ServerResponse.isAccepted(message);
                         gotResponse = true;
                         serverResponse = message;
                         if (responseLatch != null) {
@@ -186,6 +192,7 @@ public class MSGSenderThread implements Runnable {
                 // Prepare to wait for response
                 responseLatch = new CountDownLatch(1);
                 gotResponse = false;
+                responseAccepted = false;
                 serverResponse = null;
 
                 // Record START timestamp
@@ -204,7 +211,7 @@ public class MSGSenderThread implements Runnable {
                 long latency = System.currentTimeMillis() - timestamp;
 
                 // Check if got response
-                if (got && gotResponse) {
+                if (got && gotResponse && responseAccepted) {
                     // Extract status from server response
                     String status = "OK";
                     if (serverResponse != null && serverResponse.contains("ERROR")) {
