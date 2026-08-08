@@ -133,6 +133,20 @@ public class MainPhase {
         System.out.println("Connections: " + connectionCount.sum());
         System.out.println("Reconnections: " + reconnectCount.sum());
 
+        long failures = failCount.sum();
+        long attempted = successes + failures;
+        if (failures > 0 || successes == 0) {
+            // Percentiles are computed only from acknowledged messages, so a run
+            // with refusals describes the subset that got through, not the load
+            // that was actually offered.
+            System.out.println();
+            System.out.println("  !! " + failures + " of " + attempted
+                    + " messages were not acknowledged"
+                    + (attempted == 0 ? "" : String.format(" (%.1f%% accepted)",
+                            (successes * 100.0) / attempted)) + ".");
+            System.out.println("  !! The latencies below cover only the accepted messages.");
+        }
+
         // Calculate statistics from message data
         ArrayList<Long> latencies = new ArrayList<>();
         for (int i = 0; i < allMessageData.size(); i++) {
