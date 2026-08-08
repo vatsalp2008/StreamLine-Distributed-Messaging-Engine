@@ -226,10 +226,12 @@ public class MSGSenderThread implements Runnable {
 
                 // Check if got response
                 if (got && gotResponse && responseAccepted) {
-                    // Extract status from server response
-                    String status = "OK";
-                    if (serverResponse != null && serverResponse.contains("ERROR")) {
-                        status = "ERROR";
+                    // Read the status field rather than searching the whole frame:
+                    // a substring check reports ERROR for any message whose text
+                    // happens to contain the word.
+                    String status = bench.ServerResponse.statusOf(serverResponse);
+                    if (status == null) {
+                        status = "OK";
                     }
 
                     // Return complete data object

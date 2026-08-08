@@ -43,6 +43,7 @@ class MSGSenderThreadTest {
         private final CountDownLatch started = new CountDownLatch(1);
         private final List<String> received = new CopyOnWriteArrayList<>();
         private volatile String replyStatus = "OK";
+        private volatile String replyBody = "ack";
         private volatile boolean replyWithBroadcastOnly = false;
         private final AtomicInteger joins = new AtomicInteger();
 
@@ -68,7 +69,7 @@ class MSGSenderThreadTest {
                 conn.send(reply("BROADCAST", "other traffic"));
                 return;
             }
-            conn.send(reply(replyStatus, "ack"));
+            conn.send(reply(replyStatus, replyBody));
         }
 
         private String reply(String status, String message) {
@@ -185,5 +186,17 @@ class MSGSenderThreadTest {
     @Test
     void anUnreachableServerRecordsNothingAndStops() throws Exception {
         assertEquals(0, runSender("ws://127.0.0.1:1", 2).size());
+    }
+
+    @Test
+    void aMessageBodyMentioningErrorIsStillRecordedAsOk() throws Exception {
+        StubServer stub = startServer();
+        stub.replyBody = "alice: the build failed with ERROR 500";
+
+        ArrayList<MessageData> rows = runSender(stub.url(), 1);
+
+        // classification reads the status field, not the whole frame
+        assertEquals(1, rows.size());
+        assertEquals("OK", rows.get(0).getStatusCode());
     }
 }
