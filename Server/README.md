@@ -7,7 +7,11 @@ The WebSocket messaging server. For the protocol reference and configuration tab
 
 Accepts WebSocket connections on `/chat/{roomId}`, validates each frame, acknowledges it to the
 sender, fans it out to the rest of the room, and persists it asynchronously to an embedded H2
-database. A joining client is replayed the room's recent history.
+database. A joining client is replayed the room's recent history and told who else is present.
+
+A session is bound to the username it joined with, so a connection cannot attribute messages to
+anyone else, and a username may appear only once per room. Both rules can be relaxed for load
+generators that reuse one connection for many synthetic authors; see the root README.
 
 ## Layout
 
@@ -18,6 +22,10 @@ Server/
 │   │   ├── ChatServer.java              # Spring Boot entry point
 │   │   ├── configure/
 │   │   │   ├── ChatServerWSHandler.java # Connection lifecycle and message routing
+│   │   │   ├── TokenAuthenticator.java  # Shared-secret checks, constant time
+│   │   │   ├── TokenAuthFilter.java     # Token enforcement on HTTP
+│   │   │   ├── TokenHandshakeInterceptor.java # Token enforcement on /chat
+│   │   │   ├── RateLimiter.java         # Per-session token bucket
 │   │   │   ├── ConfigureWebSocket.java  # Endpoint registration and per-connection limits
 │   │   │   ├── AsyncConfig.java         # Bounded pool backing async persistence
 │   │   │   ├── MetricsConfig.java       # Room gauges published to Actuator
