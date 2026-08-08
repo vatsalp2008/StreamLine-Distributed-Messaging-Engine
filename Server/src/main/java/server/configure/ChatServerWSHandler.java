@@ -411,16 +411,36 @@ public class ChatServerWSHandler implements WebSocketHandler {
      * @param username -String, who is typing
      */
     private void announceTyping(String roomId, WebSocketSession sender, String username) {
+        sendToRoom(roomId, sender, TYPING_STATUS, username);
+    }
+
+    /**
+     * Sends one frame to every session in a room.
+     *
+     * Delivery is best effort: one slow or dead peer must not fail the write for
+     * anybody else, which is why each send is independent.
+     *
+     * @param roomId  -String, Representing the room
+     * @param exclude -WebSocketSession, a session to skip, or null to include all
+     * @param status  -String, the frame status
+     * @param message -String, the frame body
+     * @return how many sessions the frame was written to
+     */
+    private int sendToRoom(String roomId, WebSocketSession exclude, String status,
+            String message) {
         CopyOnWriteArrayList<WebSocketSession> roomSessions = chatRooms.get(roomId);
         if (roomSessions == null) {
-            return;
+            return 0;
         }
 
+        int recipients = 0;
         for (WebSocketSession peer : roomSessions) {
-            if (!peer.equals(sender)) {
-                sendResponse(peer, TYPING_STATUS, username);
+            if (exclude == null || !peer.equals(exclude)) {
+                sendResponse(peer, status, message);
+                recipients++;
             }
         }
+        return recipients;
     }
 
     /**
@@ -434,13 +454,11 @@ public class ChatServerWSHandler implements WebSocketHandler {
     private void announcePresence(String roomId) {
         CopyOnWriteArrayList<WebSocketSession> roomSessions = chatRooms.get(roomId);
         if (roomSessions == null || roomSessions.isEmpty()) {
+            // nobody to tell, and building the member list would be wasted work
             return;
         }
 
-        String members = String.join(",", getRoomMembers(roomId));
-        for (WebSocketSession peer : roomSessions) {
-            sendResponse(peer, PRESENCE, members);
-        }
+        sendToRoom(roomId, null, PRESENCE, String.join(",", getRoomMembers(roomId)));
     }
 
     /**
@@ -456,19 +474,7 @@ public class ChatServerWSHandler implements WebSocketHandler {
             return;
         }
 
-        CopyOnWriteArrayList<WebSocketSession> roomSessions = chatRooms.get(roomId);
-        if (roomSessions == null) {
-            return;
-        }
-
-        int recipients = 0;
-        for (WebSocketSession peer : roomSessions) {
-            if (!peer.equals(sender)) {
-                sendResponse(peer, "BROADCAST", message);
-                recipients++;
-            }
-        }
-        metrics.recordBroadcast(recipients);
+        metrics.recordBroadcast(sendToRoom(roomId, sender, "BROADCAST", message));
     }
 
     /**
