@@ -118,6 +118,13 @@
     background: var(--panel);
   }
   #text { flex: 1; }
+  #typing {
+    height: 18px;
+    padding: 0 16px 4px;
+    font-size: 12px;
+    color: var(--muted);
+    font-style: italic;
+  }
   #searchBar { display: flex; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--border); }
   #searchBar input { flex: 1; }
   #searchResults { padding: 0 16px; }
@@ -151,6 +158,8 @@
     <ul id="memberList"></ul>
   </aside>
 </div>
+
+<div id="typing"></div>
 
 <footer>
   <input id="text" placeholder="Message, then press Enter" maxlength="500" disabled>
@@ -219,6 +228,55 @@
     }
   }
 
+  // ---- typing indicator ----
+
+  // Who is composing, and when their hint expires. A typist that stops sending
+  // never says "I stopped", so each name is only trusted for a short window.
+  const typists = new Map();
+  const TYPING_TTL_MS = 3000;
+  let typingSweep = null;
+
+  function renderTyping() {
+    const now = Date.now();
+    for (const [name, expiry] of typists) {
+      if (expiry <= now) typists.delete(name);
+    }
+
+    const names = [...typists.keys()].sort();
+    const label = names.length === 0 ? ""
+      : names.length === 1 ? names[0] + " is typing…"
+      : names.length === 2 ? names.join(" and ") + " are typing…"
+      : "several people are typing…";
+
+    $("typing").textContent = label;
+
+    if (typists.size === 0 && typingSweep) {
+      clearInterval(typingSweep);
+      typingSweep = null;
+    } else if (typists.size > 0 && !typingSweep) {
+      typingSweep = setInterval(renderTyping, 500);
+    }
+  }
+
+  function showTyping(username) {
+    typists.set(username, Date.now() + TYPING_TTL_MS);
+    renderTyping();
+  }
+
+  // Rate limited to one hint per interval: the server broadcasts every frame it
+  // receives, so sending one per keystroke would flood the room.
+  let lastTypingSent = 0;
+  const TYPING_SEND_INTERVAL_MS = 1500;
+
+  function notifyTyping() {
+    if (!socket) return;
+
+    const now = Date.now();
+    if (now - lastTypingSent < TYPING_SEND_INTERVAL_MS) return;
+    lastTypingSent = now;
+    socket.send(frame("TYPING", "typing"));
+  }
+
   function frame(type, text) {
     return JSON.stringify({
       userId: 1,
@@ -262,6 +320,11 @@
         return;
       }
 
+      if (payload.status === "TYPING") {
+        showTyping(payload.message);
+        return;
+      }
+
       append(payload.status || "OK", payload.message);
     };
 
@@ -271,6 +334,8 @@
       setStatus(event.code === 1006 ? "refused - check the token" : "disconnected", "down");
       setJoined(false);
       renderMembers("");
+      typists.clear();
+      renderTyping();
       socket = null;
     };
 
@@ -294,7 +359,11 @@
 
   $("send").addEventListener("click", send);
   $("text").addEventListener("keydown", (e) => {
-    if (e.key === "Enter") send();
+    if (e.key === "Enter") {
+      send();
+      return;
+    }
+    notifyTyping();
   });
 
   // ---- history search, over the REST API rather than the socket ----
