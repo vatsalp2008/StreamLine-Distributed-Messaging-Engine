@@ -63,9 +63,12 @@ Connect to `ws://<host>:8080/chat/{roomId}` and send JSON frames:
 | `username` | 3–20 characters, alphanumeric only |
 | `message` | 1–500 characters |
 | `timestamp` | required, ISO-8601 |
-| `messageType` | `JOIN`, `TEXT`, or `LEAVE` |
+| `messageType` | `JOIN`, `TEXT`, `LEAVE`, or `TYPING` |
 
-A client must `JOIN` before it may send `TEXT` or `LEAVE`. Every frame is answered with:
+A client must `JOIN` before it may send anything else. A session is then held to
+the username it joined with: a later frame claiming a different author is
+refused, and a username may only appear once per room. `TYPING` is a transient
+hint, never stored and never echoed back to the sender. Every frame is answered with:
 
 ```json
 { "status": "OK", "serverTimestamp": "...", "message": "alice: hello" }
@@ -77,6 +80,7 @@ A client must `JOIN` before it may send `TEXT` or `LEAVE`. Every frame is answer
 | `BROADCAST` | A message from another member of the room |
 | `HISTORY` | A replayed past message, sent oldest first on join |
 | `PRESENCE` | Comma-separated list of everyone currently in the room |
+| `TYPING` | The username of someone composing a message |
 | `ERROR` | Validation failure or protocol violation |
 
 A `PRESENCE` frame is pushed to every member whenever someone joins, leaves, or
@@ -226,6 +230,8 @@ Every setting has a working default; override through environment variables.
 | `RATE_LIMIT_ENABLED` | `false` | Cap how fast one session may send |
 | `RATE_LIMIT_PER_SECOND` | `20` | Sustained messages per second per session |
 | `RATE_LIMIT_BURST` | `40` | Burst allowance above the sustained rate |
+| `IDENTITY_STRICT` | `true` | Hold a session to the username it joined with |
+| `IDENTITY_UNIQUE` | `true` | Allow a username to appear only once per room |
 | `RATE_LIMIT_ENABLED` | `false` | Per-session send limiting |
 | `RATE_LIMIT_PER_SECOND` | `20` | Sustained messages per second per session |
 | `RATE_LIMIT_BURST` | `40` | How far a session may burst above that rate |
@@ -281,8 +287,26 @@ mvn compile exec:java -Dexec.mainClass=client.WarmUpPhase \
 | `streamline.threads` | `STREAMLINE_THREADS` | per client |
 | `streamline.messages` | `STREAMLINE_MESSAGES` | per client |
 | `streamline.rooms` | `STREAMLINE_ROOMS` | `20` |
+| `streamline.token` | `STREAMLINE_TOKEN` | empty |
 
 `latency-analyzer` additionally writes `Result/MessageMetrics.csv` and `Result/Throughput.csv`.
+
+### What the numbers mean
+
+A message counts as successful only when the server answers it with `OK`. Two
+things that look like success are deliberately excluded:
+
+- **Refusals.** An `ERROR` is still a reply. Counting it made a run where the
+  server rejected everything report a hundred percent success rate.
+- **Other clients' traffic.** `BROADCAST`, `HISTORY` and `PRESENCE` frames arrive
+  because of what other people did. Releasing a sender on one of those let it
+  count a success before its own message had been processed, which inflated
+  throughput whenever fan-out was enabled.
+
+Each connection joins once and sends everything under that one username, because
+the server holds a session to the identity it joined with. The generator
+therefore produces `TEXT` only: a mid-stream `LEAVE` would drop the session and
+every later message on that connection would be refused.
 
 ## Development
 
