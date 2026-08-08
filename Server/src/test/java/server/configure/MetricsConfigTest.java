@@ -83,4 +83,16 @@ class MetricsConfigTest {
         // and both still roll up into the overall rejection count
         assertThat(registry.counter("streamline.messages.rejected").count()).isEqualTo(2.0);
     }
+
+    @Test
+    void typingHintsAreCountedByRecipient() {
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        ChatMetrics metrics = new ChatMetrics(registry);
+
+        metrics.recordTyping(3);
+        metrics.recordTyping(0);
+
+        // a hint delivered to nobody still costs nothing and adds nothing
+        assertThat(registry.counter("streamline.typing.sent").count()).isEqualTo(3.0);
+    }
 }

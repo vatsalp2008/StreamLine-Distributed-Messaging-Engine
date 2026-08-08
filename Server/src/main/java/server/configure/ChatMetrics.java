@@ -19,6 +19,7 @@ public class ChatMetrics {
     private final Counter rateLimited;
     private final Counter broadcastsSent;
     private final Counter identityRejected;
+    private final Counter typingSent;
 
     public ChatMetrics(MeterRegistry registry) {
         this.messagesAccepted = Counter.builder("streamline.messages.accepted")
@@ -35,6 +36,10 @@ public class ChatMetrics {
 
         this.identityRejected = Counter.builder("streamline.messages.identity_rejected")
                 .description("Frames refused because they did not match the session's identity")
+                .register(registry);
+
+        this.typingSent = Counter.builder("streamline.typing.sent")
+                .description("Typing hints delivered to room members")
                 .register(registry);
 
         this.broadcastsSent = Counter.builder("streamline.broadcasts.sent")
@@ -54,6 +59,16 @@ public class ChatMetrics {
     public void recordIdentityRejected() {
         identityRejected.increment();
         messagesRejected.increment();
+    }
+
+    /**
+     * Typing hints delivered. Tracked separately from chat because they are
+     * transient and unstored, so they otherwise leave no trace of their volume.
+     *
+     * @param recipients how many sessions the hint reached
+     */
+    public void recordTyping(int recipients) {
+        typingSent.increment(recipients);
     }
 
     public void recordRejected() {

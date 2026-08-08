@@ -411,7 +411,7 @@ public class ChatServerWSHandler implements WebSocketHandler {
      * @param username -String, who is typing
      */
     private void announceTyping(String roomId, WebSocketSession sender, String username) {
-        sendToRoom(roomId, sender, TYPING_STATUS, username);
+        metrics.recordTyping(sendToRoom(roomId, sender, TYPING_STATUS, username));
     }
 
     /**
