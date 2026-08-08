@@ -9,6 +9,16 @@ ANALYZER    := latency-analyzer/pom.xml
 
 # Override on the command line, e.g. make bench URL=ws://host:8080 THREADS=50
 URL      ?= ws://localhost:8080
+
+# Java used to run the packaged server. The jar targets 21, so override this if
+# the JDK on PATH is older: make smoke JAVA=/path/to/jdk21/bin/java
+JAVA     ?= java
+
+# Smoke run: small enough to be quick, large enough that a protocol regression shows up
+SMOKE_PORT     ?= 18099
+SMOKE_THREADS  ?= 4
+SMOKE_MESSAGES ?= 200
+SMOKE_DIR      ?= $(CURDIR)/target/smoke
 THREADS  ?= 16
 MESSAGES ?= 5000
 ROOMS    ?= 5
@@ -72,6 +82,32 @@ warmup: common ## Short warm-up run against $(URL)
 bench: common ## Throughput benchmark against $(URL)
 	$(MVN) -q compile exec:java -f $(LOAD_TESTER) \
 		-Dexec.mainClass=client.MainPhase $(BENCH_FLAGS)
+
+smoke: common ## Start the server, run a short benchmark, assert every message was accepted
+	@echo "==> packaging server"
+	@$(MVN) -q -f Server/pom.xml clean package -DskipTests
+	@echo "==> starting server on :$(SMOKE_PORT)"
+	@rm -rf $(SMOKE_DIR) && mkdir -p $(SMOKE_DIR)
+	@cd $(SMOKE_DIR) && SERVER_PORT=$(SMOKE_PORT) \
+		nohup $(JAVA) -jar $(CURDIR)/Server/target/streamline-server-0.0.1-SNAPSHOT.jar \
+		> server.log 2>&1 & echo $$! > $(SMOKE_DIR)/server.pid
+	@for i in $$(seq 1 60); do \
+		sleep 1; \
+		curl -sf http://localhost:$(SMOKE_PORT)/health >/dev/null 2>&1 && break; \
+	done
+	@echo "==> running benchmark"
+	@$(MAKE) --no-print-directory warmup URL=ws://localhost:$(SMOKE_PORT) \
+		THREADS=$(SMOKE_THREADS) MESSAGES=$(SMOKE_MESSAGES) ROOMS=2 \
+		> $(SMOKE_DIR)/bench.log 2>&1 || true
+	@grep -E "Successful messages|Failed messages" $(SMOKE_DIR)/bench.log || true
+	@kill $$(cat $(SMOKE_DIR)/server.pid) 2>/dev/null || true
+	@failed=$$(grep -oE "Failed messages: [0-9]+" $(SMOKE_DIR)/bench.log | grep -oE "[0-9]+"); \
+	sent=$$(grep -oE "Successful messages sent: [0-9]+" $(SMOKE_DIR)/bench.log | grep -oE "[0-9]+"); \
+	if [ "$$failed" != "0" ] || [ "$$sent" != "$(SMOKE_MESSAGES)" ]; then \
+		echo "SMOKE FAILED: $$sent/$(SMOKE_MESSAGES) accepted, $$failed failed"; \
+		exit 1; \
+	fi
+	@echo "SMOKE OK: $(SMOKE_MESSAGES)/$(SMOKE_MESSAGES) messages accepted"
 
 latency: common ## Latency benchmark; writes Result/*.csv
 	$(MVN) -q compile exec:java -f $(ANALYZER) \
