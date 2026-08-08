@@ -74,4 +74,26 @@ class ServerResponseTest {
     void aJsonArrayIsHandledWithoutThrowing() {
         assertFalse(ServerResponse.isAccepted("[1,2,3]"));
     }
+
+    // ---------- direct replies ----------
+
+    @Test
+    void acknowledgementsAndRefusalsAreDirectReplies() {
+        assertTrue(ServerResponse.isDirectReply(frame("OK", "alice: hello")));
+        assertTrue(ServerResponse.isDirectReply(frame("ERROR", "Validation failed")));
+    }
+
+    @Test
+    void unsolicitedPushesAreNotDirectReplies() {
+        // these arrive because of other clients, not because of what we sent
+        assertFalse(ServerResponse.isDirectReply(frame("BROADCAST", "bob: hi")));
+        assertFalse(ServerResponse.isDirectReply(frame("HISTORY", "carol: earlier")));
+        assertFalse(ServerResponse.isDirectReply(frame("PRESENCE", "alice,bob")));
+    }
+
+    @Test
+    void malformedFramesAreNotDirectReplies() {
+        assertFalse(ServerResponse.isDirectReply("not json"));
+        assertFalse(ServerResponse.isDirectReply(null));
+    }
 }

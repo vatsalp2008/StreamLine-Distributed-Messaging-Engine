@@ -61,20 +61,6 @@ public class GenerateMessage implements Runnable {
     }
 
     /**
-     * @return -String, Representing Random Message Type
-     */
-    private String randomMessageType() {
-        int rand = random.nextInt(100);
-        if (rand < 90) {
-            return "TEXT";
-        } else if (rand < 95) {
-            return "JOIN";
-        } else {
-            return "LEAVE";
-        }
-    }
-
-    /**
      * Generate Random Message
      * @return -ChatMessage
      */
@@ -90,9 +76,11 @@ public class GenerateMessage implements Runnable {
         // timestamp
         String timestamp = Instant.now().toString();
 
-        // Random Message type: 90% TEXT, 5% JOIN, 5% LEAVE
-        String type = randomMessageType();
-
-        return new ChatMessage(userId, username, msg, timestamp, type);
+        // Content only. JOIN and LEAVE are connection lifecycle events owned by
+        // the sender, not traffic to generate: a mid-stream LEAVE drops the
+        // session, so every later message on that connection is refused, and a
+        // mid-stream JOIN is refused as "Already joined". The old 90/5/5 mix
+        // looked fine only because the client counted refusals as successes.
+        return new ChatMessage(userId, username, msg, timestamp, "TEXT");
     }
 }

@@ -36,6 +36,21 @@ public class ChatMessage {
     }
 
     /**
+     * Returns a copy authored by the given identity.
+     *
+     * A connection joins once and is then held to that username, so a sender
+     * stamps its own identity on generated content rather than sending whatever
+     * author the generator invented.
+     *
+     * @param userId   -int, the sending connection's user id
+     * @param username -String, the username the connection joined with
+     * @return a copy with the author replaced, content untouched
+     */
+    public ChatMessage withAuthor(int userId, String username) {
+        return new ChatMessage(userId, username, message, timestamp, messageType);
+    }
+
+    /**
      * @return this frame as the JSON the server expects
      */
     public String toJson() {

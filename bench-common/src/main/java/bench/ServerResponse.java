@@ -30,6 +30,23 @@ public final class ServerResponse {
     }
 
     /**
+     * Whether a frame is the server's answer to the message this client just sent.
+     *
+     * BROADCAST, HISTORY and PRESENCE are unsolicited pushes: they arrive because
+     * of what other clients did. Treating them as an acknowledgement let a sender
+     * be released by someone else's traffic and count a success before its own
+     * message had even been processed, which inflated throughput whenever fan-out
+     * was enabled.
+     *
+     * @param payload the raw frame received from the server
+     * @return true when the frame answers this client's own message
+     */
+    public static boolean isDirectReply(String payload) {
+        String status = statusOf(payload);
+        return "OK".equals(status) || "ERROR".equals(status);
+    }
+
+    /**
      * @param payload the raw frame received from the server
      * @return the status field, or null when the frame is not a status frame
      */

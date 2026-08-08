@@ -51,23 +51,23 @@ class GenerateMessageTest {
 
             assertNotNull(Instant.parse(msg.getTimestamp()));
 
-            assertTrue(List.of("TEXT", "JOIN", "LEAVE").contains(msg.getMessageType()),
+            assertEquals("TEXT", msg.getMessageType(),
                     "unexpected type: " + msg.getMessageType());
         }
     }
 
     @Test
-    void messageTypesFollowTheIntendedMix() throws InterruptedException {
+    void onlyContentFramesAreGenerated() throws InterruptedException {
         Map<String, Integer> counts = new HashMap<>();
-        for (ChatMessage msg : generate(4000)) {
+        for (ChatMessage msg : generate(2000)) {
             counts.merge(msg.getMessageType(), 1, Integer::sum);
         }
 
-        // 90% TEXT with the rest split between JOIN and LEAVE; allow slack for randomness
-        assertTrue(counts.getOrDefault("TEXT", 0) > 3300,
-                "TEXT share too low: " + counts);
-        assertTrue(counts.getOrDefault("JOIN", 0) > 0, "no JOIN produced: " + counts);
-        assertTrue(counts.getOrDefault("LEAVE", 0) > 0, "no LEAVE produced: " + counts);
+        // JOIN and LEAVE belong to the connection lifecycle. Generating them
+        // mid-stream drops the session and every later message is refused.
+        assertEquals(2000, counts.getOrDefault("TEXT", 0), "expected only TEXT: " + counts);
+        assertEquals(0, counts.getOrDefault("JOIN", 0), "JOIN must not be generated");
+        assertEquals(0, counts.getOrDefault("LEAVE", 0), "LEAVE must not be generated");
     }
 
     @Test

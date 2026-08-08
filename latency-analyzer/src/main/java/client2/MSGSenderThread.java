@@ -118,6 +118,12 @@ public class MSGSenderThread implements Runnable {
 
                     @Override
                     public void onMessage(String message) {
+                        // Only a direct reply answers this client's message. Fan-out
+                        // and presence frames arrive because of other clients and
+                        // must not release a sender waiting for its own ack.
+                        if (!bench.ServerResponse.isDirectReply(message)) {
+                            return;
+                        }
                         // A refusal is still a reply. Counting it as success made a
                         // run where every message was rejected report 100% throughput.
                         responseAccepted = bench.ServerResponse.isAccepted(message);
@@ -163,6 +169,14 @@ public class MSGSenderThread implements Runnable {
         return false;
     }
 
+    /**
+     * @param msg generated content, whose author is ignored
+     * @return the same content attributed to this connection
+     */
+    private ChatMessage asThisSender(ChatMessage msg) {
+        return msg.withAuthor(ThreadNumber, "user" + ThreadNumber);
+    }
+
     private void sendJoinMessage() {
         ChatMessage join = new ChatMessage(
                 ThreadNumber,
@@ -198,8 +212,8 @@ public class MSGSenderThread implements Runnable {
                 // Record START timestamp
                 long timestamp = System.currentTimeMillis();
 
-                // Send message
-                client.send(msg.toJson());
+                // Send message under this connection's own identity
+                client.send(asThisSender(msg).toJson());
 
                 // Wait for server response
                 boolean got = responseLatch.await(
