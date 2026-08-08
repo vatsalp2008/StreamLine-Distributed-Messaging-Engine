@@ -319,8 +319,20 @@ every later message on that connection would be refused.
 ```bash
 make help      # list every task
 make verify    # every module, clean, with tests
+make smoke     # start the server, drive it with the real client, assert every message lands
 make run       # server on :8080 with the browser client at /
 make bench     # throughput benchmark against a running server
+```
+
+`make smoke` is the one to run after touching the protocol or the clients. The
+unit tests cover each side on its own; the smoke run is what catches the two
+disagreeing, which is how a benchmark once reported a hundred percent success
+while the server was refusing every message. CI runs the same target.
+
+If the JDK on your PATH is older than 21, point the target at a newer one:
+
+```bash
+make smoke JAVA=/path/to/jdk21/bin/java
 ```
 
 Always build with `clean`; see `CONTRIBUTING.md` for why.
