@@ -113,6 +113,38 @@ Two things are deliberate and worth preserving:
   cannot set headers on a WebSocket handshake, so without it the bundled client
   could not connect at all.
 
+## Identity rules
+
+A session is bound to the username it sent with `JOIN`, and a username may appear
+only once per room. Both are on by default (`streamline.identity.*`) because they
+are protocol correctness, not deployment policy: without them one connection can
+attribute messages to anyone, and a room's history means nothing.
+
+A load generator that deliberately reuses one connection for many synthetic
+authors must set `IDENTITY_STRICT=false`. The bundled clients do not need it —
+each connection joins once and stamps its own identity on everything it sends.
+
+## Measuring correctly
+
+The benchmark clients count a message as successful only when the server answers
+it with `OK`. Two mistakes are already fixed here and worth not reintroducing:
+
+- **A refusal is still a reply.** Counting any inbound frame as success meant a
+  run where the server rejected every single message reported a hundred percent
+  success rate.
+- **Fan-out is someone else's traffic.** `BROADCAST`, `HISTORY` and `PRESENCE`
+  frames arrive because of other clients. Releasing a waiting sender on one of
+  them let it count a success before its own message was processed, inflating
+  throughput by roughly 40% whenever broadcast was enabled.
+
+`ServerResponse` encodes both rules; use it rather than inspecting frames by hand.
+Never classify a frame with `payload.contains("ERROR")` — a message whose text
+mentions the word would be misread.
+
+Run `make smoke` before pushing anything that touches the protocol or the
+clients. It starts the real server, drives it with the real client, and fails
+unless every message is accepted. CI runs the same target.
+
 ## Schema changes
 
 Flyway owns the schema and Hibernate runs with `ddl-auto=validate`, so an entity
