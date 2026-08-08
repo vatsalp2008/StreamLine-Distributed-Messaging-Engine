@@ -168,7 +168,7 @@ public class ChatServerWSHandler implements WebSocketHandler {
 
             String identityProblem = identityProblem(session, roomId, chatMessage);
             if (identityProblem != null) {
-                metrics.recordRejected();
+                metrics.recordIdentityRejected();
                 sendResponse(session, "ERROR", identityProblem);
                 return;
             }

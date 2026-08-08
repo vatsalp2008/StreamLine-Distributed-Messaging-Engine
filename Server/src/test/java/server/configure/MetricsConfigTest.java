@@ -68,4 +68,19 @@ class MetricsConfigTest {
         assertThat(registry.get("streamline.sessions.joined").gauge().getId().getDescription())
                 .isNotBlank();
     }
+
+    @Test
+    void identityRejectionsAreCountedSeparatelyAndInTheTotal() {
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        ChatMetrics metrics = new ChatMetrics(registry);
+
+        metrics.recordIdentityRejected();
+        metrics.recordRejected();
+
+        // the specific counter isolates probing from ordinary validation errors
+        assertThat(registry.counter("streamline.messages.identity_rejected").count())
+                .isEqualTo(1.0);
+        // and both still roll up into the overall rejection count
+        assertThat(registry.counter("streamline.messages.rejected").count()).isEqualTo(2.0);
+    }
 }

@@ -18,6 +18,7 @@ public class ChatMetrics {
     private final Counter messagesRejected;
     private final Counter rateLimited;
     private final Counter broadcastsSent;
+    private final Counter identityRejected;
 
     public ChatMetrics(MeterRegistry registry) {
         this.messagesAccepted = Counter.builder("streamline.messages.accepted")
@@ -32,6 +33,10 @@ public class ChatMetrics {
                 .description("Frames dropped because the session exceeded its send rate")
                 .register(registry);
 
+        this.identityRejected = Counter.builder("streamline.messages.identity_rejected")
+                .description("Frames refused because they did not match the session's identity")
+                .register(registry);
+
         this.broadcastsSent = Counter.builder("streamline.broadcasts.sent")
                 .description("Copies fanned out to other members of a room")
                 .register(registry);
@@ -39,6 +44,16 @@ public class ChatMetrics {
 
     public void recordAccepted() {
         messagesAccepted.increment();
+    }
+
+    /**
+     * A frame was refused for claiming the wrong username, or for taking a name
+     * already in the room. Counted separately from ordinary validation failures
+     * because a rising rate here means someone is probing, not fat-fingering.
+     */
+    public void recordIdentityRejected() {
+        identityRejected.increment();
+        messagesRejected.increment();
     }
 
     public void recordRejected() {
