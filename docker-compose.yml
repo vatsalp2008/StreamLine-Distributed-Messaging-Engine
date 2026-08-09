@@ -18,6 +18,13 @@ services:
       # Set AUTH_ENABLED=true and AUTH_TOKEN=... to require a token
       AUTH_ENABLED: "${AUTH_ENABLED:-false}"
       AUTH_TOKEN: "${AUTH_TOKEN:-}"
+      # Caps on room state; 0 disables a limit
+      MAX_ROOMS: "${MAX_ROOMS:-1000}"
+      MAX_MEMBERS_PER_ROOM: "${MAX_MEMBERS_PER_ROOM:-500}"
+      # Days of history to keep; 0 keeps everything
+      RETENTION_DAYS: "${RETENTION_DAYS:-0}"
+      # Set to "json" for machine-readable logs
+      SPRING_PROFILES_ACTIVE: "${SPRING_PROFILES_ACTIVE:-}"
       # A session is held to the username it joined with. Set false only for a
       # load generator that reuses one connection for many synthetic authors.
       IDENTITY_STRICT: "${IDENTITY_STRICT:-true}"
