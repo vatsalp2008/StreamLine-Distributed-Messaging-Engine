@@ -28,11 +28,16 @@ Server/
 │   │   │   ├── RateLimiter.java         # Per-session token bucket
 │   │   │   ├── ConfigureWebSocket.java  # Endpoint registration and per-connection limits
 │   │   │   ├── AsyncConfig.java         # Bounded pool backing async persistence
-│   │   │   ├── MetricsConfig.java       # Room gauges published to Actuator
-│   │   │   └── ServerStatus.java        # /health and /stats
+│   │   │   ├── MetricsConfig.java       # Traffic counters published to Actuator
+│   │   │   ├── RoomGauges.java          # Live room occupancy and caps
+│   │   │   └── ServerStatus.java        # /health, /ready and /stats
 │   │   ├── model/ChatMessage.java       # Validated JPA entity
+│   │   ├── api/                         # Read-only HTTP API and error handling
 │   │   ├── repository/MessageRepository.java
-│   │   └── service/ChatService.java     # Async, transactional persistence
+│   │   └── service/
+│   │       ├── ChatService.java         # Async, transactional persistence
+│   │       └── RetentionService.java    # Scheduled pruning of old messages
+│   ├── main/resources/db/migration/     # Flyway schema migrations
 │   └── test/java/server/                # Unit and end-to-end tests
 ├── Dockerfile
 ├── pom.xml
@@ -48,7 +53,9 @@ mvn verify                          # compile and run the full test suite
 java -jar target/streamline-server-0.0.1-SNAPSHOT.jar
 ```
 
-Java 21 or newer is required.
+Java 21 or newer is required. `make smoke` from the repo root starts this server and drives it
+with the real benchmark client, which is the check that catches the server and clients
+disagreeing about the protocol.
 
 ### Docker
 
@@ -65,10 +72,13 @@ messages survive container restarts.
 | Endpoint | Purpose |
 | --- | --- |
 | `ws://<host>:8080/chat/{roomId}` | Chat connection |
-| `GET /health` | Liveness probe |
-| `GET /stats` | Active rooms, joined sessions, per-room occupancy |
-| `GET /actuator/health` | Actuator health |
-| `GET /actuator/metrics` | JVM, HTTP, and `streamline.rooms.active` / `streamline.sessions.joined` |
+| `GET /health` | Liveness probe; does no I/O |
+| `GET /ready` | Readiness probe; checks the database, 503 when not ready |
+| `GET /stats` | Active rooms, joined sessions, occupancy, and the configured caps |
+| `GET /api/rooms` | Rooms with at least one member |
+| `GET /api/rooms/{id}/messages` | Paginated history |
+| `GET /api/rooms/{id}/search` | Search history by text and optionally author |
+| `GET /actuator/metrics` | JVM, HTTP, `streamline.messages.*` and `streamline.rooms.*` |
 
 ## Validation rules
 
@@ -80,9 +90,18 @@ Every field is rejected server-side if it does not match:
 | username | 3-20 alphanumeric characters |
 | message | 1-500 characters |
 | timestamp | Required, ISO-8601 |
-| messageType | `TEXT`, `JOIN`, or `LEAVE` |
+| messageType | `TEXT`, `JOIN`, `LEAVE`, or `TYPING` |
+| clientId | Optional, up to 64 characters |
 
-A validation failure returns `{"status":"ERROR", ...}` and leaves the connection open.
+A validation failure returns `{"status":"ERROR", ...}` and leaves the connection open. When the
+frame carried a `clientId`, the reply echoes it so the sender knows which message was refused.
+
+## Schema
+
+Flyway owns the schema (`src/main/resources/db/migration`) and Hibernate runs with
+`ddl-auto=validate`, so an entity change without a matching migration fails at startup instead
+of silently altering a table. Add a new `V<n>__<description>.sql` rather than editing an applied
+migration.
 
 ## Manual testing
 
