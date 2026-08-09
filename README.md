@@ -354,6 +354,17 @@ the server holds a session to the identity it joined with. The generator
 therefore produces `TEXT` only: a mid-stream `LEAVE` would drop the session and
 every later message on that connection would be refused.
 
+## Observability
+
+| Signal | Where |
+| --- | --- |
+| Traffic counters | `streamline.messages.*` on `/actuator/metrics` |
+| Room occupancy and caps | `streamline.rooms.*`, and the `limits` block of `/stats` |
+| Structured logs | `SPRING_PROFILES_ACTIVE=json`, ECS format on stdout |
+
+Occupancy is reported next to the configured cap so an alert can fire on the ratio; a bare
+count says nothing about whether the server is about to start refusing joins.
+
 ## Development
 
 ```bash
@@ -362,6 +373,7 @@ make verify    # every module, clean, with tests
 make smoke     # start the server, drive it with the real client, assert every message lands
 make run       # server on :8080 with the browser client at /
 make bench     # throughput benchmark against a running server
+make check-attribution  # confirm GitHub will credit recent commits
 ```
 
 `make smoke` is the one to run after touching the protocol or the clients. The
