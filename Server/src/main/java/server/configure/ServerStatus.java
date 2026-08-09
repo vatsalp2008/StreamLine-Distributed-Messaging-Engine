@@ -26,9 +26,13 @@ public class ServerStatus {
     private final ChatServerWSHandler handler;
     private final DataSource dataSource;
 
-    public ServerStatus(ChatServerWSHandler handler, DataSource dataSource) {
+    private final StreamlineProperties properties;
+
+    public ServerStatus(ChatServerWSHandler handler, DataSource dataSource,
+            StreamlineProperties properties) {
         this.handler = handler;
         this.dataSource = dataSource;
+        this.properties = properties;
     }
 
     /**
@@ -74,6 +78,15 @@ public class ServerStatus {
         body.put("activeRooms", handler.getActiveRoomCount());
         body.put("joinedSessions", handler.getJoinedSessionCount());
         body.put("roomOccupancy", handler.getRoomOccupancy());
+
+        // Usage without the cap does not say whether the server is about to
+        // start refusing joins, which is the question this endpoint is for.
+        Map<String, Object> capacity = new LinkedHashMap<>();
+        capacity.put("maxRooms", properties.getLimits().getMaxRooms());
+        capacity.put("maxMembersPerRoom", properties.getLimits().getMaxMembersPerRoom());
+        capacity.put("retentionDays", properties.getRetention().getDays());
+        body.put("limits", capacity);
+
         return ResponseEntity.ok(body);
     }
 }

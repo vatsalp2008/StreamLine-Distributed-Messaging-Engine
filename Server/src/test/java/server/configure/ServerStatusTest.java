@@ -24,13 +24,16 @@ class ServerStatusTest {
     private ChatServerWSHandler handler;
     private MockMvc mockMvc;
     private javax.sql.DataSource dataSource;
+    private StreamlineProperties properties;
 
     @BeforeEach
     void setUp() {
         Validator validator = Validation.buildDefaultValidatorFactory().getValidator();
         handler = new ChatServerWSHandler(validator, mock(ChatService.class), true);
         dataSource = mock(javax.sql.DataSource.class);
-        mockMvc = MockMvcBuilders.standaloneSetup(new ServerStatus(handler, dataSource)).build();
+        properties = new StreamlineProperties();
+        mockMvc = MockMvcBuilders.standaloneSetup(
+                new ServerStatus(handler, dataSource, properties)).build();
     }
 
     private void join(String room, String username) throws IOException {
@@ -117,5 +120,26 @@ class ServerStatusTest {
                 .andExpect(jsonPath("$.joinedSessions").value(3))
                 .andExpect(jsonPath("$.roomOccupancy.1").value(2))
                 .andExpect(jsonPath("$.roomOccupancy.2").value(1));
+    }
+
+    @Test
+    void statsReportTheConfiguredCaps() throws Exception {
+        properties.getLimits().setMaxRooms(250);
+        properties.getLimits().setMaxMembersPerRoom(40);
+        properties.getRetention().setDays(30);
+
+        mockMvc.perform(get("/stats"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.limits.maxRooms").value(250))
+                .andExpect(jsonPath("$.limits.maxMembersPerRoom").value(40))
+                .andExpect(jsonPath("$.limits.retentionDays").value(30));
+    }
+
+    @Test
+    void unlimitedCapsAreReportedAsZero() throws Exception {
+        properties.getLimits().setMaxRooms(0);
+
+        mockMvc.perform(get("/stats"))
+                .andExpect(jsonPath("$.limits.maxRooms").value(0));
     }
 }
