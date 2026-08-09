@@ -223,6 +223,10 @@ SPRING_PROFILES_ACTIVE=postgres DB_URL=jdbc:postgresql://localhost:5432/streamli
 docker compose --profile postgres up
 ```
 
+The H2 and Postgres servers live in separate compose profiles, so `--profile postgres`
+starts Postgres and one server rather than two servers competing for port 8080. Use
+`docker compose up server` for the H2 one.
+
 ## Running the server
 
 ```bash
