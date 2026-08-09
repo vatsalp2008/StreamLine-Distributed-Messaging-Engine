@@ -125,9 +125,16 @@ public class MainPhase {
         long successes = successCount.sum();
         double throughput = totalTime > 0 ? (successes * 1000.0) / totalTime : 0.0;
 
+        long attemptedTotal = successes + failCount.sum();
+
         System.out.println(" ------------ RESULTS ---------------");
         System.out.println("Successful: " + successes);
         System.out.println("Failed: " + failCount.sum());
+        // Stated on every run, not only on failure: a report that says nothing
+        // about acceptance leaves the reader inferring it from a missing warning.
+        System.out.println("Accepted: " + (attemptedTotal == 0 ? "n/a"
+                : String.format("%.1f%% of %d attempted",
+                        (successes * 100.0) / attemptedTotal, attemptedTotal)));
         System.out.println("Runtime: " + totalTime + " ms");
         System.out.println("Throughput: " + String.format("%.2f", throughput) + " msg/sec");
         System.out.println("Connections: " + connectionCount.sum());
