@@ -245,4 +245,82 @@ class ChatWebSocketIntegrationTest {
             second.close();
         }
     }
+
+    // ---------- correlation ids ----------
+
+    /** A frame carrying a client-supplied correlation id. */
+    private static String frameWithId(String username, String message, String type, String id) {
+        return """
+                {"userId":7,"username":"%s","message":"%s","timestamp":"2026-08-09T10:00:00Z","messageType":"%s","clientId":"%s"}
+                """.formatted(username, message, type, id);
+    }
+
+    @Test
+    void acknowledgementsCarryTheSendersCorrelationId() throws Exception {
+        RecordingClient client = connect("it-correlate");
+        try {
+            client.send(frameWithId("alice", "Joining", "JOIN", "c-1"));
+
+            JsonNode ack = client.nextAck();
+            assertThat(ack.get("status").asText()).isEqualTo("OK");
+            assertThat(ack.get("clientId").asText()).isEqualTo("c-1");
+        } finally {
+            client.close();
+        }
+    }
+
+    @Test
+    void aSenderCanTellItsOwnAckApartFromAnotherClientsTraffic() throws Exception {
+        RecordingClient alice = connect("it-correlate-two");
+        RecordingClient bob = connect("it-correlate-two");
+        try {
+            alice.send(frameWithId("alice", "Joining", "JOIN", "a-1"));
+            assertThat(alice.nextAck().get("clientId").asText()).isEqualTo("a-1");
+
+            bob.send(frameWithId("bob", "Joining", "JOIN", "b-1"));
+            assertThat(bob.nextAck().get("clientId").asText()).isEqualTo("b-1");
+
+            // bob's join fans out to alice; that frame answers nothing alice sent
+            JsonNode fanOut = alice.nextAck();
+            assertThat(fanOut.get("status").asText()).isEqualTo("BROADCAST");
+            assertThat(fanOut.has("clientId")).isFalse();
+
+            alice.send(frameWithId("alice", "hello", "TEXT", "a-2"));
+            JsonNode ownAck = alice.nextAck();
+            assertThat(ownAck.get("status").asText()).isEqualTo("OK");
+            assertThat(ownAck.get("clientId").asText()).isEqualTo("a-2");
+        } finally {
+            alice.close();
+            bob.close();
+        }
+    }
+
+    @Test
+    void aRefusalOverARealConnectionCarriesTheId() throws Exception {
+        RecordingClient client = connect("it-correlate-error");
+        try {
+            // TEXT before JOIN is refused
+            client.send(frameWithId("alice", "hello", "TEXT", "doomed"));
+
+            JsonNode reply = client.nextFrame();
+            assertThat(reply.get("status").asText()).isEqualTo("ERROR");
+            assertThat(reply.get("clientId").asText()).isEqualTo("doomed");
+        } finally {
+            client.close();
+        }
+    }
+
+    @Test
+    void aClientThatSendsNoIdStillWorks() throws Exception {
+        RecordingClient client = connect("it-correlate-none");
+        try {
+            client.send(frame("alice", "Joining", "JOIN"));
+
+            JsonNode ack = client.nextAck();
+            assertThat(ack.get("status").asText()).isEqualTo("OK");
+            assertThat(ack.has("clientId")).isFalse();
+        } finally {
+            client.close();
+        }
+    }
 }
