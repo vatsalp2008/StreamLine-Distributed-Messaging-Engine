@@ -88,19 +88,49 @@ smoke: common ## Start the server, run a short benchmark, assert every message w
 	@$(MVN) -q -f Server/pom.xml clean package -DskipTests
 	@echo "==> starting server on :$(SMOKE_PORT)"
 	@rm -rf $(SMOKE_DIR) && mkdir -p $(SMOKE_DIR)
-	@cd $(SMOKE_DIR) && SERVER_PORT=$(SMOKE_PORT) \
-		nohup $(JAVA) -jar $(CURDIR)/Server/target/streamline-server-0.0.1-SNAPSHOT.jar \
-		> server.log 2>&1 & echo $$! > $(SMOKE_DIR)/server.pid
+	@# Refuse to run if the port is taken. Otherwise the health check below is
+	@# answered by whatever is already listening and the smoke test "passes"
+	@# without ever exercising the build under test.
+	@if lsof -ti :$(SMOKE_PORT) >/dev/null 2>&1; then \
+		echo "SMOKE FAILED: port $(SMOKE_PORT) is already in use by PID $$(lsof -ti :$(SMOKE_PORT) | tr '\n' ' ')"; \
+		echo "--- stop it first, or run with a different SMOKE_PORT"; \
+		exit 1; \
+	fi
+	@# exec so the recorded pid is the JVM itself; backgrounding the surrounding
+	@# shell records the wrapper instead, and killing that leaves the server up.
+	@( cd $(SMOKE_DIR) && exec env SERVER_PORT=$(SMOKE_PORT) \
+		$(JAVA) -jar $(CURDIR)/Server/target/streamline-server-0.0.1-SNAPSHOT.jar \
+		> server.log 2>&1 ) & echo $$! > $(SMOKE_DIR)/server.pid
+	@# The trailing 'true' matters: without it the loop exits with curl's status
+	@# when the server never comes up, and make aborts before the check below
+	@# can explain why.
 	@for i in $$(seq 1 60); do \
 		sleep 1; \
 		curl -sf http://localhost:$(SMOKE_PORT)/health >/dev/null 2>&1 && break; \
-	done
+	done; true
+	@# Fail here rather than letting the benchmark run against nothing and
+	@# reporting a confusing "0 accepted" further down.
+	@if ! curl -sf http://localhost:$(SMOKE_PORT)/health >/dev/null 2>&1; then \
+		echo "SMOKE FAILED: the server never became healthy on :$(SMOKE_PORT)"; \
+		echo "--- last lines of $(SMOKE_DIR)/server.log ---"; \
+		tail -15 $(SMOKE_DIR)/server.log 2>/dev/null; \
+		if grep -q UnsupportedClassVersionError $(SMOKE_DIR)/server.log 2>/dev/null; then \
+			echo "--- the server needs Java 21 or newer; '$(JAVA)' is older."; \
+			echo "--- retry with: make smoke JAVA=/path/to/jdk21+/bin/java"; \
+		fi; \
+		kill $$(cat $(SMOKE_DIR)/server.pid) 2>/dev/null || true; \
+		exit 1; \
+	fi
 	@echo "==> running benchmark"
 	@$(MAKE) --no-print-directory warmup URL=ws://localhost:$(SMOKE_PORT) \
 		THREADS=$(SMOKE_THREADS) MESSAGES=$(SMOKE_MESSAGES) ROOMS=2 \
 		> $(SMOKE_DIR)/bench.log 2>&1 || true
 	@grep -E "Successful messages|Failed messages" $(SMOKE_DIR)/bench.log || true
 	@kill $$(cat $(SMOKE_DIR)/server.pid) 2>/dev/null || true
+	@for i in $$(seq 1 20); do \
+		lsof -ti :$(SMOKE_PORT) >/dev/null 2>&1 || break; \
+		sleep 1; \
+	done
 	@failed=$$(grep -oE "Failed messages: [0-9]+" $(SMOKE_DIR)/bench.log | grep -oE "[0-9]+"); \
 	sent=$$(grep -oE "Successful messages sent: [0-9]+" $(SMOKE_DIR)/bench.log | grep -oE "[0-9]+"); \
 	if [ "$$failed" != "0" ] || [ "$$sent" != "$(SMOKE_MESSAGES)" ]; then \
