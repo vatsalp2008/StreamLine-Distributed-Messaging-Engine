@@ -4,7 +4,11 @@
 #   docker compose --profile bench up     # server, then a warm-up benchmark against it
 #   docker compose --profile postgres up  # server backed by Postgres instead of H2
 services:
+  # In the "h2" profile so that --profile postgres does not start this one too.
+  # Naming a service explicitly starts it regardless of profile, so
+  # "docker compose up server" still works.
   server:
+    profiles: ["h2"]
     build:
       context: ./Server
     image: streamline-server:local
@@ -45,7 +49,9 @@ services:
     profiles: ["postgres"]
     build:
       context: ./Server
-    image: streamline-server:local
+    # A distinct tag: two services building the same tag collide when both are
+    # part of one "up".
+    image: streamline-server:postgres
     ports:
       - "${SERVER_PORT:-8080}:8080"
     depends_on:
