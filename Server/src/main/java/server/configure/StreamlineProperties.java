@@ -18,6 +18,7 @@ public class StreamlineProperties {
     private final RateLimit rateLimit = new RateLimit();
     private final Auth auth = new Auth();
     private final Identity identity = new Identity();
+    private final Limits limits = new Limits();
 
     public Broadcast getBroadcast() {
         return broadcast;
@@ -33,6 +34,10 @@ public class StreamlineProperties {
 
     public Identity getIdentity() {
         return identity;
+    }
+
+    public Limits getLimits() {
+        return limits;
     }
 
     public Persistence getPersistence() {
@@ -155,6 +160,37 @@ public class StreamlineProperties {
 
         public void setUniqueUsernames(boolean uniqueUsernames) {
             this.uniqueUsernames = uniqueUsernames;
+        }
+    }
+
+    /**
+     * Caps on how much room state one server will hold.
+     *
+     * Room ids come from the connection URL, so without a cap any client can
+     * make the server allocate an unbounded number of rooms simply by connecting
+     * to new paths. Zero disables a limit.
+     */
+    public static class Limits {
+        /** Maximum rooms that may exist at once; 0 for unlimited. */
+        private int maxRooms = 1000;
+
+        /** Maximum joined sessions in a single room; 0 for unlimited. */
+        private int maxMembersPerRoom = 500;
+
+        public int getMaxRooms() {
+            return maxRooms;
+        }
+
+        public void setMaxRooms(int maxRooms) {
+            this.maxRooms = maxRooms;
+        }
+
+        public int getMaxMembersPerRoom() {
+            return maxMembersPerRoom;
+        }
+
+        public void setMaxMembersPerRoom(int maxMembersPerRoom) {
+            this.maxMembersPerRoom = maxMembersPerRoom;
         }
     }
 

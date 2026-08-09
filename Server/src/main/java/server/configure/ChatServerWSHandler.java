@@ -70,6 +70,9 @@ public class ChatServerWSHandler implements WebSocketHandler {
 
     /** How strictly a session is held to the username it joined with. */
     private final StreamlineProperties.Identity identitySettings;
+
+    /** Caps on how much room state this server will hold. */
+    private final StreamlineProperties.Limits limits;
     private final ChatMetrics metrics;
     private final ConcurrentHashMap<String, RateLimiter> rateLimiters = new ConcurrentHashMap<>();
 
@@ -77,7 +80,8 @@ public class ChatServerWSHandler implements WebSocketHandler {
     public ChatServerWSHandler(Validator validator, ChatService chatService,
             StreamlineProperties properties, ObjectMapper objectMapper, ChatMetrics metrics) {
         this(validator, chatService, properties.getBroadcast().isEnabled(), objectMapper,
-                properties.getRateLimit(), metrics, properties.getIdentity());
+                properties.getRateLimit(), metrics, properties.getIdentity(),
+                properties.getLimits());
     }
 
     /** Direct constructor, used by tests that do not need a properties object. */
@@ -102,6 +106,15 @@ public class ChatServerWSHandler implements WebSocketHandler {
     ChatServerWSHandler(Validator validator, ChatService chatService, boolean broadcastEnabled,
             ObjectMapper objectMapper, StreamlineProperties.RateLimit rateLimitSettings,
             ChatMetrics metrics, StreamlineProperties.Identity identitySettings) {
+        this(validator, chatService, broadcastEnabled, objectMapper, rateLimitSettings, metrics,
+                identitySettings, new StreamlineProperties.Limits());
+    }
+
+    ChatServerWSHandler(Validator validator, ChatService chatService, boolean broadcastEnabled,
+            ObjectMapper objectMapper, StreamlineProperties.RateLimit rateLimitSettings,
+            ChatMetrics metrics, StreamlineProperties.Identity identitySettings,
+            StreamlineProperties.Limits limits) {
+        this.limits = limits;
         this.identitySettings = identitySettings;
         this.validator = validator;
         this.chatService = chatService;
@@ -166,6 +179,13 @@ public class ChatServerWSHandler implements WebSocketHandler {
             }
 
             String roomId = getRoomId(session);
+
+            String capacityProblem = capacityProblem(roomId, chatMessage);
+            if (capacityProblem != null) {
+                metrics.recordRejected();
+                sendResponse(session, "ERROR", capacityProblem, chatMessage.getClientId());
+                return;
+            }
 
             String identityProblem = identityProblem(session, roomId, chatMessage);
             if (identityProblem != null) {
@@ -359,6 +379,36 @@ public class ChatServerWSHandler implements WebSocketHandler {
                         rateLimitSettings.getBurstSize()));
 
         return limiter.tryAcquire();
+    }
+
+    /**
+     * Checks that admitting this JOIN would not exceed the server's caps.
+     *
+     * Enforced before any room state is allocated, so a refused join leaves
+     * nothing behind. Room ids come straight from the connection URL, so
+     * without this a client can allocate rooms without bound.
+     *
+     * @return the reason to refuse, or null when there is room
+     */
+    private String capacityProblem(String roomId, ChatMessage message) {
+        if (!JOIN.equals(message.getMessageType())) {
+            return null;
+        }
+
+        int maxRooms = limits.getMaxRooms();
+        // only a room that does not exist yet would push the count up
+        if (maxRooms > 0 && !chatRooms.containsKey(roomId) && chatRooms.size() >= maxRooms) {
+            return "Server is at its room limit of " + maxRooms;
+        }
+
+        int maxMembers = limits.getMaxMembersPerRoom();
+        if (maxMembers > 0) {
+            CopyOnWriteArrayList<WebSocketSession> members = chatRooms.get(roomId);
+            if (members != null && members.size() >= maxMembers) {
+                return "Room is full (" + maxMembers + " members)";
+            }
+        }
+        return null;
     }
 
     /**
