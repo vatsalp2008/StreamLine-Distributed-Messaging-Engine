@@ -20,6 +20,10 @@ data/
 logs/
 *.csv
 
+# Benchmark and smoke-test output
+Result/
+smoke-out/
+
 # IDE
 .idea/
 *.iml
