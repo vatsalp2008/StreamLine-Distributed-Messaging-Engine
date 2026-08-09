@@ -160,7 +160,8 @@ public class ChatServerWSHandler implements WebSocketHandler {
             if (!violations.isEmpty()) {
                 metrics.recordRejected();
                 sendResponse(session, "ERROR",
-                        "Validation failed: " + violations.iterator().next().getMessage());
+                        "Validation failed: " + violations.iterator().next().getMessage(),
+                        chatMessage.getClientId());
                 return;
             }
 
@@ -169,7 +170,7 @@ public class ChatServerWSHandler implements WebSocketHandler {
             String identityProblem = identityProblem(session, roomId, chatMessage);
             if (identityProblem != null) {
                 metrics.recordIdentityRejected();
-                sendResponse(session, "ERROR", identityProblem);
+                sendResponse(session, "ERROR", identityProblem, chatMessage.getClientId());
                 return;
             }
 
@@ -188,7 +189,7 @@ public class ChatServerWSHandler implements WebSocketHandler {
             // echoback to sender from server, then fan out to everyone else in the room
             if (formattedMessage != null) {
                 metrics.recordAccepted();
-                sendResponse(session, "OK", formattedMessage);
+                sendResponse(session, "OK", formattedMessage, chatMessage.getClientId());
                 broadcast(roomId, session, formattedMessage);
 
                 // JOIN and LEAVE change who is present, so push the new member
@@ -225,7 +226,7 @@ public class ChatServerWSHandler implements WebSocketHandler {
         switch (chatMessage.getMessageType()) {
             case JOIN:
                 if (joinedSessions.contains(session)) {
-                    sendResponse(session, "ERROR", "Already joined");
+                    sendResponse(session, "ERROR", "Already joined", chatMessage.getClientId());
                     return null;
                 }
                 chatRooms.computeIfAbsent(roomId, k -> new CopyOnWriteArrayList<>()).add(session);
@@ -245,7 +246,7 @@ public class ChatServerWSHandler implements WebSocketHandler {
 
             case LEAVE:
                 if (!joinedSessions.contains(session)) {
-                    sendResponse(session, "ERROR", "You must JOIN before LEAVE");
+                    sendResponse(session, "ERROR", "You must JOIN before LEAVE", chatMessage.getClientId());
                     return null;
                 }
                 CopyOnWriteArrayList<WebSocketSession> roomSessions = chatRooms.get(roomId);
@@ -258,14 +259,14 @@ public class ChatServerWSHandler implements WebSocketHandler {
 
             case TEXT:
                 if (!joinedSessions.contains(session)) {
-                    sendResponse(session, "ERROR", "You must JOIN before sending TEXT");
+                    sendResponse(session, "ERROR", "You must JOIN before sending TEXT", chatMessage.getClientId());
                     return null;
                 }
                 return chatMessage.getUsername() + ": " + chatMessage.getMessage();
 
             case TYPING:
                 if (!joinedSessions.contains(session)) {
-                    sendResponse(session, "ERROR", "You must JOIN before sending TYPING");
+                    sendResponse(session, "ERROR", "You must JOIN before sending TYPING", chatMessage.getClientId());
                     return null;
                 }
 
@@ -275,7 +276,7 @@ public class ChatServerWSHandler implements WebSocketHandler {
                 return null;
 
             default:
-                sendResponse(session, "ERROR", "Unknown message type");
+                sendResponse(session, "ERROR", "Unknown message type", chatMessage.getClientId());
                 return null;
         }
     }
@@ -485,11 +486,24 @@ public class ChatServerWSHandler implements WebSocketHandler {
      * @param message -String, Representing the msg
      */
     private void sendResponse(WebSocketSession session, String status, String message) {
+        sendResponse(session, status, message, null);
+    }
+
+    /**
+     * @param clientId correlation id supplied by the sender, echoed back so it
+     *                 can tell which of its messages this reply answers; null
+     *                 for unsolicited pushes, which answer nothing
+     */
+    private void sendResponse(WebSocketSession session, String status, String message,
+            String clientId) {
         try {
             Map<String, Object> response = new HashMap<>();
             response.put("status", status);
             response.put("serverTimestamp", Instant.now().toString());
             response.put("message", message);
+            if (clientId != null && !clientId.isEmpty()) {
+                response.put("clientId", clientId);
+            }
 
             String jsonResponse = objectMapperMSG.writeValueAsString(response);
 

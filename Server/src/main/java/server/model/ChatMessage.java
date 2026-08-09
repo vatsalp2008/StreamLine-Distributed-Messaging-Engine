@@ -55,6 +55,17 @@ public class ChatMessage {
     private String roomId;
 
     /**
+     * Optional identifier the sender attaches so it can match a reply to the
+     * message that caused it.
+     *
+     * Transient: it is a transport concern belonging to one exchange, not part
+     * of what the room said, so it is never stored or replayed as history.
+     */
+    @Transient
+    @Size(max = 64)
+    private String clientId;
+
+    /**
      * @return Gives userId
      */
     public int getUserId() {
@@ -130,6 +141,14 @@ public class ChatMessage {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public String getClientId() {
+        return clientId;
+    }
+
+    public void setClientId(String clientId) {
+        this.clientId = clientId;
     }
 
     public String getRoomId() {
