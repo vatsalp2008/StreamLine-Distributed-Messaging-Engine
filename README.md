@@ -86,6 +86,17 @@ hint, never stored and never echoed back to the sender. Every frame is answered 
 A `PRESENCE` frame is pushed to every member whenever someone joins, leaves, or
 disconnects, so clients never poll for the member list.
 
+### Matching a reply to a message
+
+A sender may attach a `clientId` to any frame. The server echoes it on the `OK`
+or `ERROR` that answers that frame, and on nothing else, so a client can tell
+its own acknowledgement apart from fan-out traffic arriving on the same
+connection. It is optional: omit it and replies simply carry no `clientId`.
+
+```json
+{"status":"OK","serverTimestamp":"...","message":"alice: hello","clientId":"m-42"}
+```
+
 ## Browser client
 
 Open `http://localhost:8080/` once the server is running. The bundled client
@@ -177,11 +188,30 @@ shorter than 16 characters, rather than running while believing it is protected.
 `/health` and `/ready` deliberately stay open so load balancer probes keep
 working; `/actuator` is protected unless `AUTH_PROTECT_ACTUATOR=false`.
 
+## Limits
+
+Room ids come from the connection URL, so without a cap a client can make the
+server allocate rooms indefinitely. Joins beyond a cap are refused with an
+`ERROR`; the room itself is never allocated.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `MAX_ROOMS` | `1000` | Rooms that may exist at once; `0` for unlimited |
+| `MAX_MEMBERS_PER_ROOM` | `500` | Members in one room; `0` for unlimited |
+
+`GET /stats` reports both alongside current usage, and the same figures are
+exported as `streamline.rooms.*` gauges.
+
 ## Storage
 
 Schema is managed by Flyway (`Server/src/main/resources/db/migration`), and
 Hibernate runs with `ddl-auto=validate`, so the server refuses to start if the
 entities and the migrations have drifted apart.
+
+Stored messages are kept forever unless a retention window is set. `RETENTION_DAYS`
+greater than zero prunes anything older on an hourly sweep; the default of `0`
+keeps everything, so an existing deployment never starts discarding history
+unasked.
 
 The default is embedded H2. For Postgres:
 
@@ -230,6 +260,12 @@ Every setting has a working default; override through environment variables.
 | `RATE_LIMIT_ENABLED` | `false` | Cap how fast one session may send |
 | `RATE_LIMIT_PER_SECOND` | `20` | Sustained messages per second per session |
 | `RATE_LIMIT_BURST` | `40` | Burst allowance above the sustained rate |
+| `IDENTITY_STRICT` | `true` | Hold a session to the username it joined with |
+| `IDENTITY_UNIQUE` | `true` | Allow a username only once per room |
+| `MAX_ROOMS` | `1000` | Cap on concurrent rooms; `0` for unlimited |
+| `MAX_MEMBERS_PER_ROOM` | `500` | Cap on members per room; `0` for unlimited |
+| `RETENTION_DAYS` | `0` | Days of history to keep; `0` keeps everything |
+| `SPRING_PROFILES_ACTIVE` | none | Set to `json` for structured logs, `postgres` for Postgres |
 | `IDENTITY_STRICT` | `true` | Hold a session to the username it joined with |
 | `IDENTITY_UNIQUE` | `true` | Allow a username to appear only once per room |
 | `RATE_LIMIT_ENABLED` | `false` | Per-session send limiting |
