@@ -140,12 +140,14 @@ public class MSGSenderThread implements Runnable {
                         if (!bench.ServerResponse.isDirectReply(message)) {
                             return;
                         }
-                        // Only the reply to the message we are waiting on counts.
-                        // Matching by correlation id rather than by arrival order
-                        // means an unrelated frame cannot release the waiter.
+                        // Ignore a reply that names a different message. A reply
+                        // carrying no id at all is still accepted: a server that
+                        // does not echo one cannot be told apart from a matching
+                        // reply, and refusing those would hang against any server
+                        // predating correlation ids.
                         String answers = bench.ServerResponse.clientIdOf(message);
                         String awaiting = pendingClientId;
-                        if (awaiting != null && !awaiting.equals(answers)) {
+                        if (answers != null && awaiting != null && !awaiting.equals(answers)) {
                             return;
                         }
 
