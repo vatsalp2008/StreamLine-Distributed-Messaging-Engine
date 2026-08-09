@@ -48,19 +48,31 @@ public final class ServerResponse {
 
     /**
      * @param payload the raw frame received from the server
+     * @return the correlation id the frame answers, or null when it carries none
+     */
+    public static String clientIdOf(String payload) {
+        return stringField(payload, "clientId");
+    }
+
+    /**
+     * @param payload the raw frame received from the server
      * @return the status field, or null when the frame is not a status frame
      */
     public static String statusOf(String payload) {
+        return stringField(payload, "status");
+    }
+
+    private static String stringField(String payload, String field) {
         if (payload == null || payload.isEmpty()) {
             return null;
         }
 
         try {
             JsonObject json = GSON.fromJson(payload, JsonObject.class);
-            if (json == null || !json.has("status")) {
+            if (json == null || !json.has(field)) {
                 return null;
             }
-            return json.get("status").getAsString();
+            return json.get(field).getAsString();
         } catch (JsonSyntaxException | IllegalStateException | UnsupportedOperationException e) {
             // malformed or unexpected shape; the caller treats this as not accepted
             return null;

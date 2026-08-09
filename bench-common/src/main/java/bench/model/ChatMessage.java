@@ -20,6 +20,12 @@ public class ChatMessage {
     private final String messageType;
 
     /**
+     * Correlation id echoed back by the server, so a sender can tell which of
+     * its own messages a reply answers. Null when the sender does not use one.
+     */
+    private final String clientId;
+
+    /**
      * @param userId      -int, representing the user ID
      * @param username    -String, representing the username
      * @param message     -String, representing the chat msg
@@ -28,11 +34,32 @@ public class ChatMessage {
      */
     public ChatMessage(int userId, String username, String message,
                        String timestamp, String messageType) {
+        this(userId, username, message, timestamp, messageType, null);
+    }
+
+    /**
+     * @param clientId correlation id the server echoes back, or null for none
+     */
+    public ChatMessage(int userId, String username, String message,
+                       String timestamp, String messageType, String clientId) {
         this.userId = userId;
         this.username = username;
         this.message = message;
         this.timestamp = timestamp;
         this.messageType = messageType;
+        this.clientId = clientId;
+    }
+
+    /**
+     * @param clientId correlation id to attach
+     * @return a copy tagged with the id, content untouched
+     */
+    public ChatMessage withClientId(String clientId) {
+        return new ChatMessage(userId, username, message, timestamp, messageType, clientId);
+    }
+
+    public String getClientId() {
+        return clientId;
     }
 
     /**
@@ -47,7 +74,7 @@ public class ChatMessage {
      * @return a copy with the author replaced, content untouched
      */
     public ChatMessage withAuthor(int userId, String username) {
-        return new ChatMessage(userId, username, message, timestamp, messageType);
+        return new ChatMessage(userId, username, message, timestamp, messageType, clientId);
     }
 
     /**

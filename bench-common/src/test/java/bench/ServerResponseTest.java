@@ -96,4 +96,28 @@ class ServerResponseTest {
         assertFalse(ServerResponse.isDirectReply("not json"));
         assertFalse(ServerResponse.isDirectReply(null));
     }
+
+    // ---------- correlation ids ----------
+
+    @Test
+    void theCorrelationIdIsExtracted() {
+        String withId = "{\"status\":\"OK\",\"clientId\":\"m-42\",\"message\":\"ack\"}";
+
+        assertEquals("m-42", ServerResponse.clientIdOf(withId));
+    }
+
+    @Test
+    void aFrameWithoutACorrelationIdReportsNull() {
+        assertNull(ServerResponse.clientIdOf(frame("OK", "ack")));
+        assertNull(ServerResponse.clientIdOf("not json"));
+        assertNull(ServerResponse.clientIdOf(null));
+    }
+
+    @Test
+    void aRefusalStillCarriesItsCorrelationId() {
+        String refusal = "{\"status\":\"ERROR\",\"clientId\":\"m-7\",\"message\":\"nope\"}";
+
+        assertEquals("m-7", ServerResponse.clientIdOf(refusal));
+        assertFalse(ServerResponse.isAccepted(refusal));
+    }
 }
