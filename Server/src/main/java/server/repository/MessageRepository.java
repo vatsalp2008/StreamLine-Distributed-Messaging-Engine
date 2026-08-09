@@ -5,6 +5,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 import server.model.ChatMessage;
+
+import java.time.Instant;
 import java.util.List;
 
 @Repository
@@ -29,6 +31,17 @@ public interface MessageRepository extends JpaRepository<ChatMessage, Long> {
      * @return how many messages the room has stored
      */
     long countByRoomId(String roomId);
+
+    /**
+     * Deletes messages older than the cutoff.
+     *
+     * @param cutoff the oldest timestamp to keep
+     * @return how many rows were removed
+     */
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.data.jpa.repository.Query(
+            "delete from ChatMessage m where m.timestamp < :cutoff")
+    int deleteOlderThan(@org.springframework.data.repository.query.Param("cutoff") Instant cutoff);
 
     /**
      * Case-insensitive substring search within a room, newest first.

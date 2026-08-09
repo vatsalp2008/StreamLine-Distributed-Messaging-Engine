@@ -8,6 +8,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  */
 @SpringBootApplication
 @org.springframework.scheduling.annotation.EnableAsync
+@org.springframework.scheduling.annotation.EnableScheduling
 @org.springframework.boot.context.properties.EnableConfigurationProperties(
         server.configure.StreamlineProperties.class)
 public class ChatServer {

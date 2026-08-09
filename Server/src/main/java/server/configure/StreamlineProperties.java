@@ -19,6 +19,7 @@ public class StreamlineProperties {
     private final Auth auth = new Auth();
     private final Identity identity = new Identity();
     private final Limits limits = new Limits();
+    private final Retention retention = new Retention();
 
     public Broadcast getBroadcast() {
         return broadcast;
@@ -38,6 +39,10 @@ public class StreamlineProperties {
 
     public Limits getLimits() {
         return limits;
+    }
+
+    public Retention getRetention() {
+        return retention;
     }
 
     public Persistence getPersistence() {
@@ -191,6 +196,25 @@ public class StreamlineProperties {
 
         public void setMaxMembersPerRoom(int maxMembersPerRoom) {
             this.maxMembersPerRoom = maxMembersPerRoom;
+        }
+    }
+
+    /**
+     * How long stored messages are kept.
+     *
+     * Off by default (0 = keep everything): switching an existing deployment to
+     * a finite window without being asked would delete history it still has.
+     */
+    public static class Retention {
+        /** Days of history to keep; 0 or less keeps everything. */
+        private int days = 0;
+
+        public int getDays() {
+            return days;
+        }
+
+        public void setDays(int days) {
+            this.days = days;
         }
     }
 
