@@ -96,6 +96,20 @@ see the table in `README.md`. Two worth knowing while developing:
 - `RATE_LIMIT_ENABLED=true` turns on per-session limits, off by default so
   benchmarks are not throttled.
 
+## Running the smoke test
+
+`make smoke` starts the real server and drives it with the real client. Two
+things about it are worth knowing before you trust a result:
+
+- **It needs Java 21 or newer.** The target uses whatever `java` is on `PATH`,
+  which on many machines is older than the jar. It now says so rather than
+  failing with a stack trace in a log file, but you may need
+  `make smoke JAVA=/path/to/jdk21+/bin/java`.
+- **It refuses to run if the port is busy.** Before that check existed, a
+  leftover server from an earlier run answered the health probe and the smoke
+  test "passed" without exercising the build at all. If you see the port-in-use
+  message, something is still listening; `lsof -ti :18099` will name it.
+
 ## Access control
 
 Auth is off by default. To exercise it locally:
@@ -144,6 +158,22 @@ mentions the word would be misread.
 Run `make smoke` before pushing anything that touches the protocol or the
 clients. It starts the real server, drives it with the real client, and fails
 unless every message is accepted. CI runs the same target.
+
+## Protocol changes
+
+The two sides of this repo are a server and two clients that must agree. When
+changing frames:
+
+- Keep new fields optional. `clientId` is echoed only when the sender supplies
+  one, so a client that predates it is unaffected — and the client only rejects
+  a reply whose id *differs*, rather than requiring one, so it still works
+  against a server that does not echo ids at all.
+- Run `make smoke` afterwards. Unit tests cover each side against a stub; only
+  the smoke run catches the two halves disagreeing.
+- New unsolicited frames (`PRESENCE`, `TYPING`) must not be treated as
+  acknowledgements. `ServerResponse.isDirectReply` is the single place that
+  decides this; a sender released by someone else's traffic silently inflates
+  throughput.
 
 ## Schema changes
 
