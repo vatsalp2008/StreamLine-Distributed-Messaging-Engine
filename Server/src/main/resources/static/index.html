@@ -107,6 +107,9 @@
   .OK .tag { color: var(--ok); border-color: var(--ok); }
   .BROADCAST .tag { color: var(--accent); border-color: var(--accent); }
   .ERROR .tag { color: var(--error); border-color: var(--error); }
+  /* Informational frames: readable but visibly secondary to actual chat. */
+  .PRESENCE .tag, .TYPING .tag { color: var(--muted); border-color: var(--border); }
+  .PRESENCE, .TYPING { opacity: .7; }
   .ERROR .body { color: var(--error); }
   .HISTORY { opacity: .6; }
   .body { word-break: break-word; }
