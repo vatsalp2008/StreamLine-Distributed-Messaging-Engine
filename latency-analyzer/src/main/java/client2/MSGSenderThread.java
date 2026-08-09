@@ -37,6 +37,12 @@ public class MSGSenderThread implements Runnable {
 
     /** Whether the last frame was an acknowledgement rather than a refusal. */
     private volatile boolean responseAccepted;
+
+    /** Correlation id of the message currently awaiting a reply. */
+    private volatile String pendingClientId;
+
+    /** Monotonic per-connection counter behind each correlation id. */
+    private long sequence;
     private volatile String serverResponse;
     private ArrayList<MessageData> messageDataList;
 
@@ -124,6 +130,15 @@ public class MSGSenderThread implements Runnable {
                         if (!bench.ServerResponse.isDirectReply(message)) {
                             return;
                         }
+                        // Only the reply to the message we are waiting on counts.
+                        // Matching by correlation id rather than by arrival order
+                        // means an unrelated frame cannot release the waiter.
+                        String answers = bench.ServerResponse.clientIdOf(message);
+                        String awaiting = pendingClientId;
+                        if (awaiting != null && !awaiting.equals(answers)) {
+                            return;
+                        }
+
                         // A refusal is still a reply. Counting it as success made a
                         // run where every message was rejected report 100% throughput.
                         responseAccepted = bench.ServerResponse.isAccepted(message);
@@ -177,6 +192,13 @@ public class MSGSenderThread implements Runnable {
         return msg.withAuthor(ThreadNumber, "user" + ThreadNumber);
     }
 
+    /**
+     * @return a correlation id unique to this connection and message
+     */
+    private String nextClientId() {
+        return ThreadNumber + "-" + (++sequence);
+    }
+
     private void sendJoinMessage() {
         ChatMessage join = new ChatMessage(
                 ThreadNumber,
@@ -204,6 +226,8 @@ public class MSGSenderThread implements Runnable {
                 }
 
                 // Prepare to wait for response
+                ChatMessage outgoing = asThisSender(msg).withClientId(nextClientId());
+                pendingClientId = outgoing.getClientId();
                 responseLatch = new CountDownLatch(1);
                 gotResponse = false;
                 responseAccepted = false;
@@ -213,7 +237,7 @@ public class MSGSenderThread implements Runnable {
                 long timestamp = System.currentTimeMillis();
 
                 // Send message under this connection's own identity
-                client.send(asThisSender(msg).toJson());
+                client.send(outgoing.toJson());
 
                 // Wait for server response
                 boolean got = responseLatch.await(
