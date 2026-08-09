@@ -96,7 +96,18 @@ jobs:
       # tests cover each side in isolation; this is what catches the two halves
       # disagreeing about the protocol, which no amount of mocking would.
       - name: Server accepts every benchmark message
+        timeout-minutes: 10
         run: make smoke
+
+      # The run leaves the server log behind; without it a CI-only failure is
+      # just an exit code.
+      - name: Upload smoke logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-logs
+          path: target/smoke/
+          if-no-files-found: ignore
 
       - name: Upload smoke logs
         if: failure()
