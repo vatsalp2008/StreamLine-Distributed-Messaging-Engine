@@ -16,6 +16,9 @@ JAVA     ?= java
 
 # Smoke run: small enough to be quick, large enough that a protocol regression shows up
 SMOKE_PORT     ?= 18099
+
+# Used by check-attribution to ask GitHub how it attributes our commits.
+GH_REPO        ?= vatsalp2008/StreamLine-Distributed-Messaging-Engine
 SMOKE_THREADS  ?= 4
 SMOKE_MESSAGES ?= 200
 SMOKE_DIR      ?= $(CURDIR)/target/smoke
@@ -29,7 +32,7 @@ BENCH_FLAGS := -Dstreamline.url=$(URL) \
                -Dstreamline.rooms=$(ROOMS)
 
 .DEFAULT_GOAL := help
-.PHONY: help build test verify run clean common docker-build docker-up docker-down warmup bench latency
+.PHONY: help build test verify run clean common docker-build docker-up docker-down warmup bench latency check-attribution
 
 # The two benchmark clients depend on streamline-bench-common through the local
 # repository, so it has to be installed before either of them will resolve.
@@ -142,3 +145,18 @@ smoke: common ## Start the server, run a short benchmark, assert every message w
 latency: common ## Latency benchmark; writes Result/*.csv
 	$(MVN) -q compile exec:java -f $(ANALYZER) \
 		-Dexec.mainClass=client2.MainPhase $(BENCH_FLAGS)
+
+check-attribution: ## Verify recent commits will count toward the GitHub contribution graph
+	@echo "==> local identity"
+	@echo "    $$(git config user.name) <$$(git config user.email)>"
+	@echo "==> how GitHub attributes the last 5 commits on the default branch"
+	@gh api "repos/$(GH_REPO)/commits?per_page=5" \
+		--jq '.[] | "    \(.sha[0:7])  \(.commit.author.date)  \(.author.login // "UNATTRIBUTED")"' \
+		2>/dev/null || { echo "    (gh CLI unavailable or not authenticated)"; exit 0; }
+	@if gh api "repos/$(GH_REPO)/commits?per_page=5" --jq '.[].author.login' 2>/dev/null | grep -q '^$$'; then \
+		echo ""; \
+		echo "    WARNING: a commit is unattributed. Its author email is not linked to"; \
+		echo "    the GitHub account, so it will not appear on the contribution graph."; \
+		echo "    Add the address at github.com/settings/emails, or commit with one"; \
+		echo "    that is already linked."; \
+	fi
