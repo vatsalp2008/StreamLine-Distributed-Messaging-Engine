@@ -130,11 +130,28 @@ jobs:
 
       # COMPOSE_PROFILES rather than --profile: the flag is not accepted in that
       # position by every Compose version, the environment variable is.
+      #
+      # Each profile is checked for the services it is supposed to bring up, not
+      # just that the file parses. A profile that names a dependency it does not
+      # activate is an invalid project, and "bench" was broken exactly that way
+      # after the server moved into its own profile.
       - name: Validate postgres profile
-        run: COMPOSE_PROFILES=postgres docker compose config --quiet
+        run: |
+          COMPOSE_PROFILES=postgres docker compose config --quiet
+          COMPOSE_PROFILES=postgres docker compose config --services | sort > /tmp/postgres.txt
+          printf 'postgres\nserver-postgres\n' | diff - /tmp/postgres.txt
 
       - name: Validate bench profile
-        run: COMPOSE_PROFILES=bench docker compose config --quiet
+        run: |
+          COMPOSE_PROFILES=bench docker compose config --quiet
+          COMPOSE_PROFILES=bench docker compose config --services | sort > /tmp/bench.txt
+          printf 'load-tester\nserver\n' | diff - /tmp/bench.txt
+
+      - name: Validate h2 profile
+        run: |
+          COMPOSE_PROFILES=h2 docker compose config --quiet
+          COMPOSE_PROFILES=h2 docker compose config --services | sort > /tmp/h2.txt
+          printf 'server\n' | diff - /tmp/h2.txt
 
   docker:
     name: Docker image builds
