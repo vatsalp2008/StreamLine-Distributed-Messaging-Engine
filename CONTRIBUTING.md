@@ -170,10 +170,34 @@ changing frames:
   against a server that does not echo ids at all.
 - Run `make smoke` afterwards. Unit tests cover each side against a stub; only
   the smoke run catches the two halves disagreeing.
-- New unsolicited frames (`PRESENCE`, `TYPING`) must not be treated as
-  acknowledgements. `ServerResponse.isDirectReply` is the single place that
+- New unsolicited frames (`PRESENCE`, `TYPING`, `DELIVERED`) must not be treated
+  as acknowledgements. `ServerResponse.isDirectReply` is the single place that
   decides this; a sender released by someone else's traffic silently inflates
   throughput.
+- Persist only what the room accepted. Writing before `chatMessageTypeProcess`
+  stored messages that were then refused — a `TEXT` sent before `JOIN` ended up
+  in history and search despite the sender getting an `ERROR`.
+- A receipt must follow the acknowledgement it confirms, so the write is started
+  after the `OK` is sent. The reverse order would tell a client its message was
+  stored before telling it the message was accepted.
+- Nothing about tracking a write may fail the message that caused it. The
+  persistence future is guarded against being null and against completing
+  exceptionally, because an `OK` has already been promised by then.
+
+## Compose profiles
+
+The stack has three: `h2`, `postgres`, and `bench`. Two rules learned the hard
+way:
+
+- A service must be in every profile that depends on it. `load-tester` depends on
+  `server`, so `server` is in both `h2` and `bench`; naming a dependency a
+  profile does not activate makes the whole project invalid, not just that
+  service unavailable.
+- Two services must not build the same image tag. `server` and `server-postgres`
+  share a Dockerfile but tag separately, because building both in one `up`
+  otherwise fails.
+
+CI asserts which services each profile starts, not merely that the file parses.
 
 ## Schema changes
 
