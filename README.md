@@ -390,11 +390,17 @@ every later message on that connection would be refused.
 | --- | --- |
 | Traffic counters | `streamline.messages.*` on `/actuator/metrics` |
 | Room occupancy and caps | `streamline.rooms.*`, and the `limits` block of `/stats` |
-| Write queue pressure | `streamline.persistence.*`; depth approaching capacity means writes are running on the caller |
+| Write queue pressure | `streamline.persistence.*`, and `writeQueueSaturation` in `/stats` |
+| Retention activity | `streamline.retention.pruned` |
 | Structured logs | `SPRING_PROFILES_ACTIVE=json`, ECS format on stdout |
 
 Occupancy is reported next to the configured cap so an alert can fire on the ratio; a bare
 count says nothing about whether the server is about to start refusing joins.
+
+`writeQueueSaturation` runs from 0 to 1. At 1 the persistence queue is full and writes fall
+back to running on the WebSocket threads, which is the intended back pressure but shows up
+only as latency unless you watch this. `streamline.retention.pruned` distinguishes "nothing
+was old enough to delete" from "the sweep stopped running", which the logs alone cannot.
 
 ## Development
 
