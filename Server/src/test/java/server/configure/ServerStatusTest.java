@@ -25,6 +25,7 @@ class ServerStatusTest {
     private MockMvc mockMvc;
     private javax.sql.DataSource dataSource;
     private StreamlineProperties properties;
+    private org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor persistencePool;
 
     @BeforeEach
     void setUp() {
@@ -32,8 +33,12 @@ class ServerStatusTest {
         handler = new ChatServerWSHandler(validator, mock(ChatService.class), true);
         dataSource = mock(javax.sql.DataSource.class);
         properties = new StreamlineProperties();
+        persistencePool = new org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor();
+        persistencePool.setCorePoolSize(1);
+        persistencePool.setQueueCapacity(4);
+        persistencePool.initialize();
         mockMvc = MockMvcBuilders.standaloneSetup(
-                new ServerStatus(handler, dataSource, properties)).build();
+                new ServerStatus(handler, dataSource, properties, persistencePool)).build();
     }
 
     private void join(String room, String username) throws IOException {
@@ -141,5 +146,36 @@ class ServerStatusTest {
 
         mockMvc.perform(get("/stats"))
                 .andExpect(jsonPath("$.limits.maxRooms").value(0));
+    }
+
+    @Test
+    void statsReportHowFullTheWriteQueueIs() throws Exception {
+        // an idle server has nothing queued
+        mockMvc.perform(get("/stats"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.writeQueueSaturation").value(0.0));
+    }
+
+    @Test
+    void aBacklogOfWritesShowsAsSaturation() throws Exception {
+        java.util.concurrent.CountDownLatch block = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch running = new java.util.concurrent.CountDownLatch(1);
+        persistencePool.execute(() -> {
+            running.countDown();
+            try {
+                block.await(10, java.util.concurrent.TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        running.await(10, java.util.concurrent.TimeUnit.SECONDS);
+        persistencePool.execute(() -> { });
+        persistencePool.execute(() -> { });
+
+        // 2 queued of a capacity of 4; writes run on the caller once it fills
+        mockMvc.perform(get("/stats"))
+                .andExpect(jsonPath("$.writeQueueSaturation").value(0.5));
+
+        block.countDown();
     }
 }

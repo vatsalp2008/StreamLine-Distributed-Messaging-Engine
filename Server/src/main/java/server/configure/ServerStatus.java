@@ -7,7 +7,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+
 import javax.sql.DataSource;
+import java.util.concurrent.Executor;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.*;
@@ -28,11 +32,29 @@ public class ServerStatus {
 
     private final StreamlineProperties properties;
 
+    /** The bounded pool behind async persistence, used to report saturation. */
+    private final Executor persistenceExecutor;
+
     public ServerStatus(ChatServerWSHandler handler, DataSource dataSource,
-            StreamlineProperties properties) {
+            StreamlineProperties properties,
+            @Qualifier(AsyncConfig.PERSISTENCE_EXECUTOR) Executor persistenceExecutor) {
         this.handler = handler;
         this.dataSource = dataSource;
         this.properties = properties;
+        this.persistenceExecutor = persistenceExecutor;
+    }
+
+    /**
+     * @return how full the write queue is, from 0 to 1, or 0 when unknown
+     */
+    private double writeQueueSaturation() {
+        if (!(persistenceExecutor instanceof ThreadPoolTaskExecutor pool)) {
+            return 0.0;
+        }
+
+        var queue = pool.getThreadPoolExecutor().getQueue();
+        int capacity = queue.size() + queue.remainingCapacity();
+        return capacity == 0 ? 0.0 : (double) queue.size() / capacity;
     }
 
     /**
@@ -86,6 +108,7 @@ public class ServerStatus {
         capacity.put("maxMembersPerRoom", properties.getLimits().getMaxMembersPerRoom());
         capacity.put("retentionDays", properties.getRetention().getDays());
         body.put("limits", capacity);
+        body.put("writeQueueSaturation", writeQueueSaturation());
 
         return ResponseEntity.ok(body);
     }
