@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -32,6 +33,9 @@ public class ChatServerWSHandler implements WebSocketHandler {
 
     /** Status of a frame announcing who is in the room */
     static final String PRESENCE = "PRESENCE";
+
+    /** Status of a frame confirming a message reached durable storage */
+    static final String DELIVERED = "DELIVERED";
 
     /** Status of a frame announcing that someone is composing a message */
     static final String TYPING_STATUS = "TYPING";
@@ -73,6 +77,9 @@ public class ChatServerWSHandler implements WebSocketHandler {
 
     /** Caps on how much room state this server will hold. */
     private final StreamlineProperties.Limits limits;
+
+    /** Whether a second frame confirms that a message was stored. */
+    private final boolean receiptsEnabled;
     private final ChatMetrics metrics;
     private final ConcurrentHashMap<String, RateLimiter> rateLimiters = new ConcurrentHashMap<>();
 
@@ -81,7 +88,7 @@ public class ChatServerWSHandler implements WebSocketHandler {
             StreamlineProperties properties, ObjectMapper objectMapper, ChatMetrics metrics) {
         this(validator, chatService, properties.getBroadcast().isEnabled(), objectMapper,
                 properties.getRateLimit(), metrics, properties.getIdentity(),
-                properties.getLimits());
+                properties.getLimits(), properties.getReceipts().isEnabled());
     }
 
     /** Direct constructor, used by tests that do not need a properties object. */
@@ -114,6 +121,15 @@ public class ChatServerWSHandler implements WebSocketHandler {
             ObjectMapper objectMapper, StreamlineProperties.RateLimit rateLimitSettings,
             ChatMetrics metrics, StreamlineProperties.Identity identitySettings,
             StreamlineProperties.Limits limits) {
+        this(validator, chatService, broadcastEnabled, objectMapper, rateLimitSettings, metrics,
+                identitySettings, limits, false);
+    }
+
+    ChatServerWSHandler(Validator validator, ChatService chatService, boolean broadcastEnabled,
+            ObjectMapper objectMapper, StreamlineProperties.RateLimit rateLimitSettings,
+            ChatMetrics metrics, StreamlineProperties.Identity identitySettings,
+            StreamlineProperties.Limits limits, boolean receiptsEnabled) {
+        this.receiptsEnabled = receiptsEnabled;
         this.limits = limits;
         this.identitySettings = identitySettings;
         this.validator = validator;
@@ -200,7 +216,7 @@ public class ChatServerWSHandler implements WebSocketHandler {
             // beat the history query. They are also ~10% of benchmark traffic, so
             // skipping them removes that many writes from the hot path.
             if (TEXT.equals(chatMessage.getMessageType())) {
-                chatService.saveMessage(chatMessage, roomId);
+                confirmWhenStored(session, chatMessage, roomId);
             }
 
             // method for getting formatted message to send in response
@@ -379,6 +395,45 @@ public class ChatServerWSHandler implements WebSocketHandler {
                         rateLimitSettings.getBurstSize()));
 
         return limiter.tryAcquire();
+    }
+
+    /**
+     * Persists a message and, when receipts are on, tells the sender once the
+     * row actually exists.
+     *
+     * The OK sent moments earlier means "accepted", not "durable": the write
+     * happens on another thread and can still fail. Only this frame says stored.
+     */
+    private void confirmWhenStored(WebSocketSession session, ChatMessage chatMessage,
+            String roomId) {
+
+        String clientId = chatMessage.getClientId();
+        CompletableFuture<Long> stored = chatService.saveMessage(chatMessage, roomId);
+
+        // Persistence is fire and forget as far as the sender's OK is concerned.
+        // Nothing about tracking the write may fail the message that caused it.
+        if (stored == null) {
+            return;
+        }
+
+        stored.thenAccept(storedId -> {
+                    if (!receiptsEnabled) {
+                        return;
+                    }
+                    if (storedId == null) {
+                        // the write failed; saying nothing would leave the sender
+                        // waiting for a receipt that is never coming
+                        sendResponse(session, "ERROR", "Message was not stored", clientId);
+                        return;
+                    }
+                    metrics.recordReceipt();
+                    sendResponse(session, DELIVERED, String.valueOf(storedId), clientId);
+                })
+                .exceptionally(failure -> {
+                    log.warn("Could not confirm storage for room {}: {}",
+                            roomId, failure.getMessage());
+                    return null;
+                });
     }
 
     /**

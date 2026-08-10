@@ -20,6 +20,7 @@ public class StreamlineProperties {
     private final Identity identity = new Identity();
     private final Limits limits = new Limits();
     private final Retention retention = new Retention();
+    private final Receipts receipts = new Receipts();
 
     public Broadcast getBroadcast() {
         return broadcast;
@@ -43,6 +44,10 @@ public class StreamlineProperties {
 
     public Retention getRetention() {
         return retention;
+    }
+
+    public Receipts getReceipts() {
+        return receipts;
     }
 
     public Persistence getPersistence() {
@@ -215,6 +220,28 @@ public class StreamlineProperties {
 
         public void setDays(int days) {
             this.days = days;
+        }
+    }
+
+    /**
+     * Confirmation that a message reached durable storage.
+     *
+     * An OK acknowledges that a message was accepted, not that it was written:
+     * persistence is asynchronous, so the two can differ. A receipt is a second
+     * frame sent once the row exists.
+     *
+     * Off by default because it doubles server-to-client frames for senders that
+     * do not care whether a message was durable.
+     */
+    public static class Receipts {
+        private boolean enabled = false;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
         }
     }
 

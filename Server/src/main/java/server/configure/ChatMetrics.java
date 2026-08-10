@@ -20,6 +20,7 @@ public class ChatMetrics {
     private final Counter broadcastsSent;
     private final Counter identityRejected;
     private final Counter typingSent;
+    private final Counter receiptsSent;
 
     public ChatMetrics(MeterRegistry registry) {
         this.messagesAccepted = Counter.builder("streamline.messages.accepted")
@@ -40,6 +41,10 @@ public class ChatMetrics {
 
         this.typingSent = Counter.builder("streamline.typing.sent")
                 .description("Typing hints delivered to room members")
+                .register(registry);
+
+        this.receiptsSent = Counter.builder("streamline.receipts.sent")
+                .description("Messages confirmed as durably stored")
                 .register(registry);
 
         this.broadcastsSent = Counter.builder("streamline.broadcasts.sent")
@@ -67,6 +72,11 @@ public class ChatMetrics {
      *
      * @param recipients how many sessions the hint reached
      */
+    /** A message confirmed as durably stored. */
+    public void recordReceipt() {
+        receiptsSent.increment();
+    }
+
     public void recordTyping(int recipients) {
         typingSent.increment(recipients);
     }
