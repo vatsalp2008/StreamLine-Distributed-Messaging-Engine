@@ -13,6 +13,11 @@ A session is bound to the username it joined with, so a connection cannot attrib
 anyone else, and a username may appear only once per room. Both rules can be relaxed for load
 generators that reuse one connection for many synthetic authors; see the root README.
 
+Only messages the room accepted are stored: persistence runs after the state-machine check, so a
+`TEXT` sent before `JOIN` is refused and never reaches the database. With `RECEIPTS_ENABLED=true`
+a `DELIVERED` frame follows the acknowledgement once the row exists, since an `OK` only means the
+message was accepted.
+
 ## Layout
 
 ```
@@ -30,6 +35,7 @@ Server/
 │   │   │   ├── AsyncConfig.java         # Bounded pool backing async persistence
 │   │   │   ├── MetricsConfig.java       # Traffic counters published to Actuator
 │   │   │   ├── RoomGauges.java          # Live room occupancy and caps
+│   │   │   ├── PersistenceGauges.java   # Write queue depth and throughput
 │   │   │   └── ServerStatus.java        # /health, /ready and /stats
 │   │   ├── model/ChatMessage.java       # Validated JPA entity
 │   │   ├── api/                         # Read-only HTTP API and error handling
@@ -78,7 +84,7 @@ messages survive container restarts.
 | `GET /api/rooms` | Rooms with at least one member |
 | `GET /api/rooms/{id}/messages` | Paginated history |
 | `GET /api/rooms/{id}/search` | Search history by text and optionally author |
-| `GET /actuator/metrics` | JVM, HTTP, `streamline.messages.*` and `streamline.rooms.*` |
+| `GET /actuator/metrics` | JVM, HTTP, `streamline.messages.*`, `streamline.rooms.*`, `streamline.persistence.*` |
 
 ## Validation rules
 
