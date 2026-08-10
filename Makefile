@@ -101,7 +101,10 @@ smoke: common ## Start the server, run a short benchmark, assert every message w
 	fi
 	@# exec so the recorded pid is the JVM itself; backgrounding the surrounding
 	@# shell records the wrapper instead, and killing that leaves the server up.
-	@( cd $(SMOKE_DIR) && exec env SERVER_PORT=$(SMOKE_PORT) \
+	@# Receipts on: they add a second frame per message, which is exactly the
+	@# kind of protocol change a client can mishandle. Running the smoke test
+	@# without them would leave that path unexercised end to end.
+	@( cd $(SMOKE_DIR) && exec env SERVER_PORT=$(SMOKE_PORT) RECEIPTS_ENABLED=true \
 		$(JAVA) -jar $(CURDIR)/Server/target/streamline-server-0.0.1-SNAPSHOT.jar \
 		> server.log 2>&1 ) & echo $$! > $(SMOKE_DIR)/server.pid
 	@# The trailing 'true' matters: without it the loop exits with curl's status
@@ -129,6 +132,9 @@ smoke: common ## Start the server, run a short benchmark, assert every message w
 		THREADS=$(SMOKE_THREADS) MESSAGES=$(SMOKE_MESSAGES) ROOMS=2 \
 		> $(SMOKE_DIR)/bench.log 2>&1 || true
 	@grep -E "Successful messages|Failed messages" $(SMOKE_DIR)/bench.log || true
+	@sleep 2
+	@curl -s http://localhost:$(SMOKE_PORT)/actuator/metrics/streamline.receipts.sent \
+		| sed -n 's/.*"value":\([0-9.]*\).*/\1/p' > $(SMOKE_DIR)/receipts.txt 2>/dev/null || true
 	@kill $$(cat $(SMOKE_DIR)/server.pid) 2>/dev/null || true
 	@for i in $$(seq 1 20); do \
 		lsof -ti :$(SMOKE_PORT) >/dev/null 2>&1 || break; \
@@ -141,6 +147,7 @@ smoke: common ## Start the server, run a short benchmark, assert every message w
 		exit 1; \
 	fi
 	@echo "SMOKE OK: $(SMOKE_MESSAGES)/$(SMOKE_MESSAGES) messages accepted"
+	@echo "==> receipts confirmed: $$(cat $(SMOKE_DIR)/receipts.txt 2>/dev/null || echo unknown)"
 
 latency: common ## Latency benchmark; writes Result/*.csv
 	$(MVN) -q compile exec:java -f $(ANALYZER) \
