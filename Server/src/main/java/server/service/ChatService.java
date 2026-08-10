@@ -32,18 +32,23 @@ public class ChatService {
      *
      * @param message -ChatMessage, Representing the message to store
      * @param roomId  -String, Representing the room the message belongs to
-     * @return a future that completes once the write attempt has finished
+     * @return a future completing with the generated message id, or null when
+     *         the write failed
      */
     @Async(AsyncConfig.PERSISTENCE_EXECUTOR)
     @Transactional
-    public CompletableFuture<Void> saveMessage(ChatMessage message, String roomId) {
+    public CompletableFuture<Long> saveMessage(ChatMessage message, String roomId) {
         try {
             message.setRoomId(roomId);
-            messageRepository.save(message);
+            // the generated id is what lets a caller refer to the stored row
+            // afterwards, which a Void future threw away
+            return CompletableFuture.completedFuture(messageRepository.save(message).getId());
         } catch (Exception e) {
             log.error("Failed to persist message for room {}: {}", roomId, e.getMessage(), e);
+            // null id rather than a failed future: persistence is fire and
+            // forget, and callers already treat a missing id as "not stored"
+            return CompletableFuture.completedFuture(null);
         }
-        return CompletableFuture.completedFuture(null);
     }
 
     /**
