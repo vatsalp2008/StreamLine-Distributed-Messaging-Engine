@@ -48,7 +48,11 @@ public class OpenApiConfig {
                                     .name(properties.getAuth().getHeader())
                                     .description("Shared secret. May also be supplied as a "
                                             + "query parameter, which is how a browser "
-                                            + "authenticates a WebSocket handshake.")))
+                                            + "authenticates a WebSocket handshake. A room "
+                                            + "configured with its own token accepts only "
+                                            + "that token on its /api/rooms/{roomId} "
+                                            + "endpoints; the shared secret is refused "
+                                            + "there.")))
                     .addSecurityItem(new SecurityRequirement().addList(SCHEME_NAME));
         }
 
