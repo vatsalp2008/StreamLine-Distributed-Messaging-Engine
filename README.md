@@ -80,6 +80,7 @@ hint, never stored and never echoed back to the sender. Every frame is answered 
 | `BROADCAST` | A message from another member of the room |
 | `HISTORY` | A replayed past message, sent oldest first on join |
 | `PRESENCE` | Comma-separated list of everyone currently in the room |
+| `DELIVERED` | The message reached storage; body is the stored id |
 | `TYPING` | The username of someone composing a message |
 | `ERROR` | Validation failure or protocol violation |
 
@@ -96,6 +97,21 @@ connection. It is optional: omit it and replies simply carry no `clientId`.
 ```json
 {"status":"OK","serverTimestamp":"...","message":"alice: hello","clientId":"m-42"}
 ```
+
+### Knowing a message was stored
+
+`OK` means the server accepted a message, not that it wrote it: persistence
+happens on another thread and can still fail. With `RECEIPTS_ENABLED=true` a
+second frame follows once the row exists, carrying the same `clientId` and the
+stored id as its body:
+
+```json
+{"status":"DELIVERED","serverTimestamp":"...","message":"12345","clientId":"m-42"}
+```
+
+If the write fails, an `ERROR` carrying that `clientId` arrives instead, so a
+sender is never left waiting for a receipt that is not coming. Receipts are off
+by default because they double server-to-client frames.
 
 ## Browser client
 
@@ -188,6 +204,19 @@ shorter than 16 characters, rather than running while believing it is protected.
 `/health` and `/ready` deliberately stay open so load balancer probes keep
 working; `/actuator` is protected unless `AUTH_PROTECT_ACTUATOR=false`.
 
+### Per-room tokens
+
+A single shared token opens every room. To give one room its own secret:
+
+```properties
+streamline.auth.room-tokens.private-room=a-different-long-secret
+```
+
+That room then accepts only its own token, on both the WebSocket handshake and
+the room's REST endpoints; every other room continues to use the shared one.
+`GET /api/rooms` stays on the shared token, since it names rooms rather than
+revealing what was said in them.
+
 ## Limits
 
 Room ids come from the connection URL, so without a cap a client can make the
@@ -269,6 +298,7 @@ Every setting has a working default; override through environment variables.
 | `MAX_ROOMS` | `1000` | Cap on concurrent rooms; `0` for unlimited |
 | `MAX_MEMBERS_PER_ROOM` | `500` | Cap on members per room; `0` for unlimited |
 | `RETENTION_DAYS` | `0` | Days of history to keep; `0` keeps everything |
+| `RECEIPTS_ENABLED` | `false` | Confirm each stored message with a `DELIVERED` frame |
 | `SPRING_PROFILES_ACTIVE` | none | Set to `json` for structured logs, `postgres` for Postgres |
 | `IDENTITY_STRICT` | `true` | Hold a session to the username it joined with |
 | `IDENTITY_UNIQUE` | `true` | Allow a username to appear only once per room |
@@ -360,6 +390,7 @@ every later message on that connection would be refused.
 | --- | --- |
 | Traffic counters | `streamline.messages.*` on `/actuator/metrics` |
 | Room occupancy and caps | `streamline.rooms.*`, and the `limits` block of `/stats` |
+| Write queue pressure | `streamline.persistence.*`; depth approaching capacity means writes are running on the caller |
 | Structured logs | `SPRING_PROFILES_ACTIVE=json`, ECS format on stdout |
 
 Occupancy is reported next to the configured cap so an alert can fire on the ratio; a bare
