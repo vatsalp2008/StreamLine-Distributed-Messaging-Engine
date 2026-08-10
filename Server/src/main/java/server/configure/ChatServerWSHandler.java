@@ -210,15 +210,6 @@ public class ChatServerWSHandler implements WebSocketHandler {
                 return;
             }
 
-            // Only chat content is durable. JOIN and LEAVE are connection control
-            // frames: storing them replayed "alice: Joining" back as room history, and
-            // a client could even receive its own JOIN as HISTORY when the async write
-            // beat the history query. They are also ~10% of benchmark traffic, so
-            // skipping them removes that many writes from the hot path.
-            if (TEXT.equals(chatMessage.getMessageType())) {
-                confirmWhenStored(session, chatMessage, roomId);
-            }
-
             // method for getting formatted message to send in response
             String formattedMessage = chatMessageTypeProcess(session, roomId, chatMessage);
 
@@ -227,6 +218,18 @@ public class ChatServerWSHandler implements WebSocketHandler {
                 metrics.recordAccepted();
                 sendResponse(session, "OK", formattedMessage, chatMessage.getClientId());
                 broadcast(roomId, session, formattedMessage);
+
+                // Only chat content is durable, and only once it has been accepted.
+                // JOIN and LEAVE are connection control frames: storing them replayed
+                // "alice: Joining" back as room history. Persisting before the check
+                // above also stored messages the room had just refused, such as a
+                // TEXT sent before JOIN, which then surfaced in history and search.
+                //
+                // Written after the acknowledgement so a receipt can never arrive
+                // before the OK it confirms.
+                if (TEXT.equals(chatMessage.getMessageType())) {
+                    confirmWhenStored(session, chatMessage, roomId);
+                }
 
                 // JOIN and LEAVE change who is present, so push the new member
                 // list rather than making clients poll for it
