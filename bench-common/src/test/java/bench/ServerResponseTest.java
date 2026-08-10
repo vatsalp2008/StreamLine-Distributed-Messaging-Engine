@@ -120,4 +120,25 @@ class ServerResponseTest {
         assertEquals("m-7", ServerResponse.clientIdOf(refusal));
         assertFalse(ServerResponse.isAccepted(refusal));
     }
+
+    // ---------- delivery receipts ----------
+
+    @Test
+    void aReceiptIsNotADirectReply() {
+        // DELIVERED arrives after the OK, once the write lands. Treating it as
+        // the reply would let a sender count one message twice.
+        assertFalse(ServerResponse.isDirectReply(frame("DELIVERED", "77")));
+    }
+
+    @Test
+    void aReceiptStillCountsAsAccepted() {
+        assertTrue(ServerResponse.isAccepted(frame("DELIVERED", "77")));
+    }
+
+    @Test
+    void aReceiptCarriesTheCorrelationIdItConfirms() {
+        String receipt = "{\"status\":\"DELIVERED\",\"clientId\":\"m-9\",\"message\":\"77\"}";
+
+        assertEquals("m-9", ServerResponse.clientIdOf(receipt));
+    }
 }
