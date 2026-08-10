@@ -33,11 +33,18 @@ class RetentionServiceTest {
         repository.deleteAll();
     }
 
+    private io.micrometer.core.instrument.simple.SimpleMeterRegistry registry;
+
     private RetentionService serviceKeeping(int days) {
         StreamlineProperties properties = new StreamlineProperties();
         properties.getRetention().setDays(days);
+        registry = new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
         return new RetentionService(repository, properties,
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                Clock.fixed(NOW, ZoneOffset.UTC), registry);
+    }
+
+    private double prunedCount() {
+        return registry.get("streamline.retention.pruned").counter().count();
     }
 
     private void store(String text, Instant when) {
@@ -127,5 +134,39 @@ class RetentionServiceTest {
 
         assertThat(serviceKeeping(30).prune()).isEqualTo(2);
         assertThat(repository.count()).isZero();
+    }
+
+    @Test
+    void removalsAreCounted() {
+        store("ancient", NOW.minusSeconds(40 * 86400));
+        store("older still", NOW.minusSeconds(60 * 86400));
+
+        RetentionService service = serviceKeeping(30);
+        service.prune();
+
+        assertThat(prunedCount()).isEqualTo(2.0);
+    }
+
+    @Test
+    void aSweepThatRemovesNothingLeavesTheCountAtZero() {
+        store("recent", NOW.minusSeconds(86400));
+
+        RetentionService service = serviceKeeping(30);
+        service.prune();
+
+        // distinguishable from the sweep not running only by the counter existing
+        assertThat(prunedCount()).isZero();
+    }
+
+    @Test
+    void theCounterAccumulatesAcrossSweeps() {
+        RetentionService service = serviceKeeping(30);
+        store("first", NOW.minusSeconds(40 * 86400));
+        service.prune();
+
+        store("second", NOW.minusSeconds(40 * 86400));
+        service.prune();
+
+        assertThat(prunedCount()).isEqualTo(2.0);
     }
 }
