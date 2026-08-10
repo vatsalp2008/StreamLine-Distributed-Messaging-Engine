@@ -132,9 +132,16 @@ smoke: common ## Start the server, run a short benchmark, assert every message w
 		THREADS=$(SMOKE_THREADS) MESSAGES=$(SMOKE_MESSAGES) ROOMS=2 \
 		> $(SMOKE_DIR)/bench.log 2>&1 || true
 	@grep -E "Successful messages|Failed messages" $(SMOKE_DIR)/bench.log || true
-	@sleep 2
-	@curl -s http://localhost:$(SMOKE_PORT)/actuator/metrics/streamline.receipts.sent \
-		| sed -n 's/.*"value":\([0-9.]*\).*/\1/p' > $(SMOKE_DIR)/receipts.txt 2>/dev/null || true
+	@# Poll rather than sleeping a fixed amount: persistence is asynchronous, so
+	@# a single sample taken right after the run reports one receipt short of the
+	@# messages sent and looks like a lost write when nothing was lost.
+	@for i in $$(seq 1 30); do \
+		curl -s http://localhost:$(SMOKE_PORT)/actuator/metrics/streamline.receipts.sent \
+			| sed -n 's/.*"value":\([0-9.]*\).*/\1/p' > $(SMOKE_DIR)/receipts.txt 2>/dev/null; \
+		got=$$(cut -d. -f1 $(SMOKE_DIR)/receipts.txt 2>/dev/null); \
+		[ "$$got" = "$(SMOKE_MESSAGES)" ] && break; \
+		sleep 1; \
+	done; true
 	@kill $$(cat $(SMOKE_DIR)/server.pid) 2>/dev/null || true
 	@for i in $$(seq 1 20); do \
 		lsof -ti :$(SMOKE_PORT) >/dev/null 2>&1 || break; \
@@ -147,7 +154,12 @@ smoke: common ## Start the server, run a short benchmark, assert every message w
 		exit 1; \
 	fi
 	@echo "SMOKE OK: $(SMOKE_MESSAGES)/$(SMOKE_MESSAGES) messages accepted"
-	@echo "==> receipts confirmed: $$(cat $(SMOKE_DIR)/receipts.txt 2>/dev/null || echo unknown)"
+	@receipts=$$(cut -d. -f1 $(SMOKE_DIR)/receipts.txt 2>/dev/null); \
+	if [ "$$receipts" != "$(SMOKE_MESSAGES)" ]; then \
+		echo "SMOKE FAILED: $$receipts/$(SMOKE_MESSAGES) messages confirmed as stored"; \
+		exit 1; \
+	fi; \
+	echo "==> receipts confirmed: $$receipts/$(SMOKE_MESSAGES)"
 
 latency: common ## Latency benchmark; writes Result/*.csv
 	$(MVN) -q compile exec:java -f $(ANALYZER) \
