@@ -5,6 +5,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import server.configure.StreamlineProperties;
 import server.repository.MessageRepository;
 
@@ -29,9 +31,16 @@ public class RetentionService {
     private final StreamlineProperties.Retention settings;
     private final Clock clock;
 
+    /**
+     * Rows removed since startup. A scheduled job that only logs gives no way to
+     * tell "nothing was old enough" from "the sweep stopped running".
+     */
+    private final Counter pruned;
+
     @org.springframework.beans.factory.annotation.Autowired
-    public RetentionService(MessageRepository messageRepository, StreamlineProperties properties) {
-        this(messageRepository, properties, Clock.systemUTC());
+    public RetentionService(MessageRepository messageRepository, StreamlineProperties properties,
+            MeterRegistry registry) {
+        this(messageRepository, properties, Clock.systemUTC(), registry);
     }
 
     /**
@@ -39,9 +48,18 @@ public class RetentionService {
      */
     RetentionService(MessageRepository messageRepository, StreamlineProperties properties,
             Clock clock) {
+        this(messageRepository, properties, clock,
+                new io.micrometer.core.instrument.simple.SimpleMeterRegistry());
+    }
+
+    RetentionService(MessageRepository messageRepository, StreamlineProperties properties,
+            Clock clock, MeterRegistry registry) {
         this.messageRepository = messageRepository;
         this.settings = properties.getRetention();
         this.clock = clock;
+        this.pruned = Counter.builder("streamline.retention.pruned")
+                .description("Messages removed by the retention sweep")
+                .register(registry);
     }
 
     /**
@@ -59,6 +77,7 @@ public class RetentionService {
         int removed = messageRepository.deleteOlderThan(cutoff);
 
         if (removed > 0) {
+            pruned.increment(removed);
             log.info("Retention removed {} messages older than {}", removed, cutoff);
         }
         return removed;
