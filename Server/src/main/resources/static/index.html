@@ -112,6 +112,9 @@
   .PRESENCE, .TYPING { opacity: .7; }
   .ERROR .body { color: var(--error); }
   .HISTORY { opacity: .6; }
+  /* A line stays dimmed until the server confirms the write. */
+  .pending { opacity: .55; }
+  .stored { color: var(--ok); font-size: 11px; margin-left: 4px; }
   .body { word-break: break-word; }
   footer {
     display: flex;
@@ -207,6 +210,7 @@
 
     // only follow the tail if the reader was already there
     if (atBottom) log.scrollTop = log.scrollHeight;
+    return line;
   }
 
   // Membership arrives as PRESENCE frames pushed by the server whenever someone
@@ -280,13 +284,22 @@
     socket.send(frame("TYPING", "typing"));
   }
 
-  function frame(type, text) {
+  // Each outgoing frame carries an id the server echoes on its reply, so a
+  // reply can be tied to the message that caused it rather than to whatever
+  // arrived next.
+  let sequence = 0;
+  function nextClientId() {
+    return "c" + (++sequence);
+  }
+
+  function frame(type, text, clientId) {
     return JSON.stringify({
       userId: 1,
       username: $("user").value.trim(),
       message: text,
       timestamp: new Date().toISOString(),
-      messageType: type
+      messageType: type,
+      clientId: clientId || nextClientId()
     });
   }
 
@@ -323,6 +336,27 @@
         return;
       }
 
+      if (payload.status === "DELIVERED") {
+        const line = awaitingReceipt.get(payload.clientId);
+        if (line) {
+          line.classList.remove("pending");
+          const mark = document.createElement("span");
+          mark.className = "stored";
+          mark.textContent = "stored";
+          mark.title = "message id " + payload.message;
+          line.appendChild(mark);
+          awaitingReceipt.delete(payload.clientId);
+        }
+        return;
+      }
+
+      // Our own messages are already on screen from send(); showing the echo
+      // again would duplicate every line we sent.
+      if (payload.clientId && awaitingReceipt.has(payload.clientId)
+          && payload.status === "OK") {
+        return;
+      }
+
       if (payload.status === "TYPING") {
         showTyping(payload.message);
         return;
@@ -345,10 +379,22 @@
     socket.onerror = () => setStatus("connection error", "down");
   }
 
+  // Lines awaiting a DELIVERED frame, keyed by the id sent with them.
+  const awaitingReceipt = new Map();
+
   function send() {
     const text = $("text").value.trim();
     if (!text || !socket) return;
-    socket.send(frame("TEXT", text));
+
+    const clientId = nextClientId();
+    socket.send(frame("TEXT", text, clientId));
+
+    // shown immediately but marked provisional: an OK means accepted, and the
+    // write can still fail afterwards
+    const line = append("OK", $("user").value.trim() + ": " + text);
+    line.classList.add("pending");
+    awaitingReceipt.set(clientId, line);
+
     $("text").value = "";
   }
 
