@@ -188,4 +188,81 @@ class TokenAuthFilterTest {
         verify(chain, never()).doFilter(org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.any());
     }
+
+    // ---------- room-scoped paths ----------
+
+    private StreamlineProperties withRoomToken(String room, String token) {
+        StreamlineProperties properties = properties(true);
+        properties.getAuth().setRoomTokens(new java.util.HashMap<>(java.util.Map.of(room, token)));
+        return properties;
+    }
+
+    @Test
+    void readingAPrivateRoomNeedsThatRoomsToken() throws Exception {
+        StreamlineProperties properties = withRoomToken("private", "private-room-token-value");
+
+        MockHttpServletRequest request = request("/api/rooms/private/messages");
+        request.addHeader("X-Streamline-Token", "private-room-token-value");
+
+        assertThat(passesThrough(filter(properties), request, new MockHttpServletResponse()))
+                .isTrue();
+    }
+
+    @Test
+    void theSharedTokenCannotReadAPrivateRoom() throws Exception {
+        StreamlineProperties properties = withRoomToken("private", "private-room-token-value");
+
+        MockHttpServletRequest request = request("/api/rooms/private/messages");
+        request.addHeader("X-Streamline-Token", TOKEN);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        // the socket already refuses this; HTTP must not be the way around it
+        assertThat(passesThrough(filter(properties), request, response)).isFalse();
+        assertThat(response.getStatus()).isEqualTo(401);
+    }
+
+    @Test
+    void searchIsScopedToTheRoomToo() throws Exception {
+        StreamlineProperties properties = withRoomToken("private", "private-room-token-value");
+
+        MockHttpServletRequest request = request("/api/rooms/private/search");
+        request.addHeader("X-Streamline-Token", TOKEN);
+
+        assertThat(passesThrough(filter(properties), request, new MockHttpServletResponse()))
+                .isFalse();
+    }
+
+    @Test
+    void anOrdinaryRoomStillAcceptsTheSharedToken() throws Exception {
+        StreamlineProperties properties = withRoomToken("private", "private-room-token-value");
+
+        MockHttpServletRequest request = request("/api/rooms/general/messages");
+        request.addHeader("X-Streamline-Token", TOKEN);
+
+        assertThat(passesThrough(filter(properties), request, new MockHttpServletResponse()))
+                .isTrue();
+    }
+
+    @Test
+    void listingRoomsUsesTheSharedToken() throws Exception {
+        StreamlineProperties properties = withRoomToken("private", "private-room-token-value");
+
+        MockHttpServletRequest request = request("/api/rooms");
+        request.addHeader("X-Streamline-Token", TOKEN);
+
+        // the list names rooms rather than revealing what was said in them
+        assertThat(passesThrough(filter(properties), request, new MockHttpServletResponse()))
+                .isTrue();
+    }
+
+    @Test
+    void anEncodedRoomNameIsResolvedBeforeCheckingItsToken() throws Exception {
+        StreamlineProperties properties = withRoomToken("a room", "spaced-room-token-value");
+
+        MockHttpServletRequest request = request("/api/rooms/a%20room/messages");
+        request.addHeader("X-Streamline-Token", TOKEN);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        assertThat(passesThrough(filter(properties), request, response)).isFalse();
+    }
 }

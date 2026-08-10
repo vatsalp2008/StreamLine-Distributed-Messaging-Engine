@@ -27,6 +27,9 @@ public class TokenAuthFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(TokenAuthFilter.class);
 
+    /** Path prefix under which endpoints address a single room. */
+    private static final String ROOM_API_PREFIX = "/api/rooms/";
+
     private final TokenAuthenticator authenticator;
 
     public TokenAuthFilter(TokenAuthenticator authenticator) {
@@ -65,13 +68,41 @@ public class TokenAuthFilter extends OncePerRequestFilter {
             presented = request.getParameter(authenticator.queryParamName());
         }
 
-        if (!authenticator.isAuthorised(presented)) {
+        // Room-scoped paths are checked against that room's token. Otherwise a
+        // holder of the shared token could read a private room's history over
+        // HTTP even though the socket refuses them.
+        String roomId = roomIdOf(request.getRequestURI());
+
+        if (!authenticator.isAuthorisedForRoom(roomId, presented)) {
             log.warn("Rejected unauthenticated {} {}", request.getMethod(), request.getRequestURI());
             writeUnauthorised(response);
             return;
         }
 
         chain.doFilter(request, response);
+    }
+
+    /**
+     * Extracts the room from an /api/rooms/{roomId}/... path.
+     *
+     * @return the room id, or null when the path is not room-scoped
+     */
+    private String roomIdOf(String path) {
+        if (path == null || !path.startsWith(ROOM_API_PREFIX)) {
+            return null;
+        }
+
+        String rest = path.substring(ROOM_API_PREFIX.length());
+        int nextSegment = rest.indexOf('/');
+        // "/api/rooms" itself lists rooms rather than reading one, so it stays
+        // on the shared token
+        if (nextSegment < 0) {
+            return null;
+        }
+
+        String roomId = rest.substring(0, nextSegment);
+        return roomId.isBlank() ? null : java.net.URLDecoder.decode(roomId,
+                java.nio.charset.StandardCharsets.UTF_8);
     }
 
     /**
