@@ -8,7 +8,9 @@ services:
   # Naming a service explicitly starts it regardless of profile, so
   # "docker compose up server" still works.
   server:
-    profiles: ["h2"]
+    # Also in "bench" because load-tester depends on it: a profile that names a
+    # dependency without activating it is an invalid project, not a warning.
+    profiles: ["h2", "bench"]
     build:
       context: ./Server
     image: streamline-server:local
