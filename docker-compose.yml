@@ -27,6 +27,8 @@ services:
       MAX_MEMBERS_PER_ROOM: "${MAX_MEMBERS_PER_ROOM:-500}"
       # Days of history to keep; 0 keeps everything
       RETENTION_DAYS: "${RETENTION_DAYS:-0}"
+      # Confirm each stored message with a DELIVERED frame
+      RECEIPTS_ENABLED: "${RECEIPTS_ENABLED:-false}"
       # Set to "json" for machine-readable logs
       SPRING_PROFILES_ACTIVE: "${SPRING_PROFILES_ACTIVE:-}"
       # A session is held to the username it joined with. Set false only for a
