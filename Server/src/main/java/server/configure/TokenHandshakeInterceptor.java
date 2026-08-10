@@ -27,6 +27,9 @@ public class TokenHandshakeInterceptor implements HandshakeInterceptor {
 
     private static final Logger log = LoggerFactory.getLogger(TokenHandshakeInterceptor.class);
 
+    /** URI segment that precedes the room id, matching the handler's own. */
+    private static final String ROOM_PATH_PREFIX = "/chat/";
+
     private final TokenAuthenticator authenticator;
 
     public TokenHandshakeInterceptor(TokenAuthenticator authenticator) {
@@ -41,7 +44,8 @@ public class TokenHandshakeInterceptor implements HandshakeInterceptor {
             return true;
         }
 
-        if (authenticator.isAuthorised(presentedToken(request))) {
+        String roomId = roomIdOf(request);
+        if (authenticator.isAuthorisedForRoom(roomId, presentedToken(request))) {
             return true;
         }
 
@@ -54,6 +58,31 @@ public class TokenHandshakeInterceptor implements HandshakeInterceptor {
     public void afterHandshake(ServerHttpRequest request, ServerHttpResponse response,
             WebSocketHandler handler, Exception exception) {
         // nothing to clean up
+    }
+
+    /**
+     * Extracts the room from the handshake path, so a room with its own token
+     * can be checked against that token rather than the shared one.
+     *
+     * @return the room id, or null when the path carries none
+     */
+    private String roomIdOf(ServerHttpRequest request) {
+        String path = request.getURI().getPath();
+        if (path == null) {
+            return null;
+        }
+
+        int at = path.indexOf(ROOM_PATH_PREFIX);
+        if (at < 0) {
+            return null;
+        }
+
+        String roomId = path.substring(at + ROOM_PATH_PREFIX.length());
+        int nextSegment = roomId.indexOf('/');
+        if (nextSegment >= 0) {
+            roomId = roomId.substring(0, nextSegment);
+        }
+        return roomId.isBlank() ? null : roomId;
     }
 
     /**

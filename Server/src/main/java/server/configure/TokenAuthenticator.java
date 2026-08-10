@@ -75,6 +75,37 @@ public class TokenAuthenticator {
     }
 
     /**
+     * Checks a secret against the token guarding a particular room.
+     *
+     * A room with its own token accepts only that one; anything else falls back
+     * to the shared token, so adding a room secret does not require reissuing
+     * credentials for every other room.
+     *
+     * @param roomId    the room being entered, may be null for non-room access
+     * @param presented the secret supplied by the caller, may be null
+     * @return true when access should be granted
+     */
+    public boolean isAuthorisedForRoom(String roomId, String presented) {
+        if (!settings.isEnabled()) {
+            return true;
+        }
+
+        String roomToken = roomId == null ? null : settings.getRoomTokens().get(roomId);
+        if (roomToken == null || roomToken.isBlank()) {
+            return isAuthorised(presented);
+        }
+        return matches(roomToken, presented);
+    }
+
+    /**
+     * @return true when this room has a secret of its own
+     */
+    public boolean hasRoomToken(String roomId) {
+        String roomToken = roomId == null ? null : settings.getRoomTokens().get(roomId);
+        return roomToken != null && !roomToken.isBlank();
+    }
+
+    /**
      * @param presented the secret supplied by the caller, may be null
      * @return true when access should be granted
      */
@@ -86,9 +117,15 @@ public class TokenAuthenticator {
             return false;
         }
 
-        byte[] expected = settings.getToken().getBytes(StandardCharsets.UTF_8);
-        byte[] supplied = presented.getBytes(StandardCharsets.UTF_8);
+        return matches(settings.getToken(), presented);
+    }
 
-        return MessageDigest.isEqual(expected, supplied);
+    /** Constant-time comparison, for the same reason as {@link #isAuthorised}. */
+    private boolean matches(String expected, String presented) {
+        if (presented == null || presented.isEmpty()) {
+            return false;
+        }
+        return MessageDigest.isEqual(expected.getBytes(StandardCharsets.UTF_8),
+                presented.getBytes(StandardCharsets.UTF_8));
     }
 }

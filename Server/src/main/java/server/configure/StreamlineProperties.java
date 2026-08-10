@@ -101,6 +101,23 @@ public class StreamlineProperties {
         /** Leave the probes open so a load balancer can reach them unauthenticated. */
         private boolean protectActuator = true;
 
+        /**
+         * Per-room secrets, keyed by room id.
+         *
+         * A room listed here accepts only its own token; every other room falls
+         * back to the shared one. Without this a single token opens every room,
+         * so one participant can read and post anywhere.
+         */
+        private java.util.Map<String, String> roomTokens = new java.util.HashMap<>();
+
+        public java.util.Map<String, String> getRoomTokens() {
+            return roomTokens;
+        }
+
+        public void setRoomTokens(java.util.Map<String, String> roomTokens) {
+            this.roomTokens = roomTokens;
+        }
+
         public boolean isEnabled() {
             return enabled;
         }
