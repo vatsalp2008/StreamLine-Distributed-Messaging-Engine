@@ -39,11 +39,37 @@ class ChatServiceTest {
     @Test
     void saveMessageStampsRoomIdBeforePersisting() {
         ChatMessage msg = message("hello", "TEXT");
+        // stubbed, or the mock returns null and this quietly exercises the
+        // failure path while still passing its assertions
+        when(repository.save(msg)).thenReturn(stored(msg, 42L));
 
         chatService.saveMessage(msg, "room-7").join();
 
         assertThat(msg.getRoomId()).isEqualTo("room-7");
         verify(repository).save(msg);
+    }
+
+    @Test
+    void saveMessageReturnsTheGeneratedId() {
+        ChatMessage msg = message("hello", "TEXT");
+        when(repository.save(msg)).thenReturn(stored(msg, 42L));
+
+        // the id is what a delivery receipt reports, so it has to come back
+        assertThat(chatService.saveMessage(msg, "room-7").join()).isEqualTo(42L);
+    }
+
+    @Test
+    void aFailedWriteReportsNoId() {
+        when(repository.save(any(ChatMessage.class)))
+                .thenThrow(new RuntimeException("database is down"));
+
+        assertThat(chatService.saveMessage(message("hi", "TEXT"), "room-1").join()).isNull();
+    }
+
+    /** The same message as the database would hand it back, with an id. */
+    private ChatMessage stored(ChatMessage msg, Long id) {
+        msg.setId(id);
+        return msg;
     }
 
     @Test
