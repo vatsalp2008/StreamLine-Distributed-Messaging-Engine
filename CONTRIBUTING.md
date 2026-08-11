@@ -180,9 +180,31 @@ changing frames:
 - A receipt must follow the acknowledgement it confirms, so the write is started
   after the `OK` is sent. The reverse order would tell a client its message was
   stored before telling it the message was accepted.
+- Frames the server invented (`REDACTED`, and anything added later) must be
+  classified in `ServerResponse` before a benchmark sees them. The default for
+  an unrecognised status is "not my acknowledgement", so a new frame type cannot
+  silently release a waiting sender.
 - Nothing about tracking a write may fail the message that caused it. The
   persistence future is guarded against being null and against completing
   exceptionally, because an `OK` has already been promised by then.
+
+## The browser client
+
+`Server/src/main/resources/static/app.js` is a module of this project like any
+other, and is tested by `make test-js` (`node --test`, included in `make verify`).
+
+- The harness in `Server/src/test/js/harness.js` hand-stubs the handful of
+  browser APIs the client uses rather than depending on jsdom, so the tests run
+  anywhere node exists with no install step. It binds `window`, `document`,
+  `WebSocket` and `fetch` as parameters instead of mutating real globals.
+- Anything worth asserting has to be reachable. `handleFrame` was pulled out of
+  an inline `socket.onmessage` closure for exactly that reason; keep new logic
+  in named functions and add it to the `StreamLineClient` export.
+- Reset anything static in the harness between loads. `FakeSocket.last` leaked
+  between tests and made a "never connected" assertion pass on a socket left
+  over from an earlier one.
+- Render user-supplied text with `textContent`, never `innerHTML`. The server
+  validates usernames, but the client must not be the thing relying on that.
 
 ## Compose profiles
 
