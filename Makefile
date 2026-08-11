@@ -32,7 +32,7 @@ BENCH_FLAGS := -Dstreamline.url=$(URL) \
                -Dstreamline.rooms=$(ROOMS)
 
 .DEFAULT_GOAL := help
-.PHONY: help build test verify run clean common docker-build docker-up docker-down warmup bench latency check-attribution
+.PHONY: help build test test-js verify run clean common docker-build docker-up docker-down warmup bench latency check-attribution
 
 # The two benchmark clients depend on streamline-bench-common through the local
 # repository, so it has to be installed before either of them will resolve.
@@ -52,6 +52,12 @@ build: common ## Compile every module
 # sources no longer compile from scratch.
 test: ## Run the server test suite
 	$(MVN) clean verify -f $(SERVER)
+
+test-js: ## Run the browser client tests (needs node)
+	@# No npm install: the harness stubs the handful of browser APIs the client
+	@# uses, so this runs anywhere node is present.
+	@node --test 'Server/src/test/js/*.test.js'
+
 
 verify: ## Run every module's tests, as CI does
 	$(MVN) clean verify -f $(SERVER)
