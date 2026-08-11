@@ -33,7 +33,11 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api")
-@Tag(name = "Chat", description = "Read-only view of rooms and their history")
+@Tag(name = "Chat", description = "Rooms, their history, and moderation")
+@ApiResponse(responseCode = "429", description = "Rate limited; retry after slowing down",
+        content = @io.swagger.v3.oas.annotations.media.Content)
+@ApiResponse(responseCode = "401", description = "Missing or wrong token, when auth is enabled",
+        content = @io.swagger.v3.oas.annotations.media.Content)
 public class ChatApiController {
 
     /** Matches the 50 messages replayed over WebSocket on join. */
