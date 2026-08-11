@@ -58,9 +58,26 @@ class ChatApiControllerTest {
         MappingJackson2HttpMessageConverter converter = new MappingJackson2HttpMessageConverter(mapper);
 
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new ChatApiController(handler, chatService))
+                .standaloneSetup(new ChatApiController(handler, chatService,
+                        new server.configure.TokenAuthenticator(new StreamlineProperties())))
                 .setControllerAdvice(new ApiExceptionHandler())
                 .setMessageConverters(converter)
+                .build();
+    }
+
+    /** Rebuilds the controller with auth on and one room holding its own token. */
+    private void withRoomToken(String room, String token) {
+        StreamlineProperties properties = new StreamlineProperties();
+        properties.getAuth().setEnabled(true);
+        properties.getAuth().setToken("shared-token-long-enough");
+        properties.getAuth().setRoomTokens(new java.util.HashMap<>(java.util.Map.of(room, token)));
+
+        ObjectMapper mapper = JsonMapper.builder().addModule(new JavaTimeModule()).build();
+        mockMvc = MockMvcBuilders
+                .standaloneSetup(new ChatApiController(handler, chatService,
+                        new server.configure.TokenAuthenticator(properties)))
+                .setControllerAdvice(new ApiExceptionHandler())
+                .setMessageConverters(new MappingJackson2HttpMessageConverter(mapper))
                 .build();
     }
 
@@ -203,5 +220,53 @@ class ChatApiControllerTest {
         mockMvc.perform(get("/api/rooms/general/messages"))
                 .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.message").value("The request could not be completed"));
+    }
+
+    // ---------- private rooms are not disclosed ----------
+
+    @Test
+    void aRoomWithItsOwnTokenIsHiddenFromSharedTokenHolders() throws Exception {
+        join("general", "alice");
+        join("private", "bob");
+        withRoomToken("private", "private-room-token-value");
+
+        mockMvc.perform(get("/api/rooms").header("X-Streamline-Token", "shared-token-long-enough"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].roomId").value("general"));
+    }
+
+    @Test
+    void aRoomWithItsOwnTokenIsVisibleToThatToken() throws Exception {
+        join("general", "alice");
+        join("private", "bob");
+        withRoomToken("private", "private-room-token-value");
+
+        // "general" holds no secret, so it is named to any caller that got this
+        // far; what matters is that "private" is no longer suppressed
+        mockMvc.perform(get("/api/rooms").header("X-Streamline-Token", "private-room-token-value"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.roomId == 'private')]").isNotEmpty());
+    }
+
+    @Test
+    void everyRoomIsListedWhenNoneHaveTheirOwnToken() throws Exception {
+        join("general", "alice");
+        join("random", "bob");
+
+        // the default build has auth disabled, so nothing is hidden
+        mockMvc.perform(get("/api/rooms"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2));
+    }
+
+    @Test
+    void theTokenMayAlsoArriveAsAQueryParameterWhenListing() throws Exception {
+        join("private", "bob");
+        withRoomToken("private", "private-room-token-value");
+
+        mockMvc.perform(get("/api/rooms").param("token", "private-room-token-value"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1));
     }
 }

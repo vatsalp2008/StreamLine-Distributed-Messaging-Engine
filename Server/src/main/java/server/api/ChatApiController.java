@@ -13,7 +13,9 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import jakarta.servlet.http.HttpServletRequest;
 import server.configure.ChatServerWSHandler;
+import server.configure.TokenAuthenticator;
 import server.model.ChatMessage;
 import server.service.ChatService;
 
@@ -40,10 +42,13 @@ public class ChatApiController {
 
     private final ChatServerWSHandler handler;
     private final ChatService chatService;
+    private final TokenAuthenticator authenticator;
 
-    public ChatApiController(ChatServerWSHandler handler, ChatService chatService) {
+    public ChatApiController(ChatServerWSHandler handler, ChatService chatService,
+            TokenAuthenticator authenticator) {
         this.handler = handler;
         this.chatService = chatService;
+        this.authenticator = authenticator;
     }
 
     /**
@@ -58,14 +63,32 @@ public class ChatApiController {
                     + "makes a room active.")
     @ApiResponse(responseCode = "200", description = "Active rooms, ordered by room id")
     @GetMapping("/rooms")
-    public ResponseEntity<List<RoomSummary>> rooms() {
+    public ResponseEntity<List<RoomSummary>> rooms(HttpServletRequest request) {
+        String presented = presentedToken(request);
         Map<String, Integer> occupancy = handler.getRoomOccupancy();
 
         List<RoomSummary> summaries = new ArrayList<>(occupancy.size());
-        occupancy.forEach((roomId, members) ->
-                summaries.add(new RoomSummary(roomId, members, chatService.countMessages(roomId))));
+        occupancy.forEach((roomId, members) -> {
+            // A room with its own secret is not named to holders of the shared
+            // token: listing it would disclose that it exists, and to whom, to
+            // exactly the people its own token is meant to exclude.
+            if (authenticator.hasRoomToken(roomId)
+                    && !authenticator.isAuthorisedForRoom(roomId, presented)) {
+                return;
+            }
+            summaries.add(new RoomSummary(roomId, members, chatService.countMessages(roomId)));
+        });
 
         return ResponseEntity.ok(summaries);
+    }
+
+    /**
+     * @return the token this caller presented, by header or query parameter
+     */
+    private String presentedToken(HttpServletRequest request) {
+        String fromHeader = request.getHeader(authenticator.headerName());
+        return fromHeader != null ? fromHeader
+                : request.getParameter(authenticator.queryParamName());
     }
 
     /**
