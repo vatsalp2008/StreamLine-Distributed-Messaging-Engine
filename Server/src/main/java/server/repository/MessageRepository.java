@@ -52,8 +52,16 @@ public interface MessageRepository extends JpaRepository<ChatMessage, Long> {
      * @return the number of rows removed: 1 on success, 0 if it did not exist
      *         in that room
      */
-    @org.springframework.data.jpa.repository.Modifying
-    long deleteByIdAndRoomId(Long id, String roomId);
+    // An explicit query rather than a derived deleteBy...: a derived delete
+    // loads the entities first and does not reliably yield a row count, which
+    // is the one thing the caller needs in order to answer 404 or 204.
+    // flush/clear keep the persistence context from returning the row afterwards.
+    @org.springframework.data.jpa.repository.Modifying(
+            clearAutomatically = true, flushAutomatically = true)
+    @org.springframework.data.jpa.repository.Query(
+            "delete from ChatMessage m where m.id = :id and m.roomId = :roomId")
+    int deleteFromRoom(@org.springframework.data.repository.query.Param("id") Long id,
+            @org.springframework.data.repository.query.Param("roomId") String roomId);
 
     /**
      * Case-insensitive substring search within a room, newest first.

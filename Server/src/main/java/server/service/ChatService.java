@@ -103,7 +103,7 @@ public class ChatService {
      */
     @Transactional
     public boolean deleteMessage(String roomId, Long messageId) {
-        return messageRepository.deleteByIdAndRoomId(messageId, roomId) > 0;
+        return messageRepository.deleteFromRoom(messageId, roomId) > 0;
     }
 
     /**
