@@ -184,6 +184,14 @@ changing frames:
   classified in `ServerResponse` before a benchmark sees them. The default for
   an unrecognised status is "not my acknowledgement", so a new frame type cannot
   silently release a waiting sender.
+- A `WebSocketSession` may only be written by one thread at a time, and a bare
+  `synchronized` block is not enough. Once receipts started arriving from the
+  persistence pool while acknowledgements were still going out on the WebSocket
+  thread, sends failed with
+  `state [TEXT_PARTIAL_WRITING] which is an invalid state`, and a message was
+  lost per run. Every send now goes through a
+  `ConcurrentWebSocketSessionDecorator` held in `senders`; use that, not the raw
+  session, for anything sent outside the handler thread.
 - Nothing about tracking a write may fail the message that caused it. The
   persistence future is guarded against being null and against completing
   exceptionally, because an `OK` has already been promised by then.
