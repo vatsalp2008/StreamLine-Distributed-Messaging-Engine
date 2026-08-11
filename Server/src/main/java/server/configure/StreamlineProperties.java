@@ -273,6 +273,33 @@ public class StreamlineProperties {
         /** How far a session may burst above the sustained rate. */
         private int burstSize = 40;
 
+        /**
+         * Sustained API requests per second, per client address.
+         *
+         * The socket has been rate limited for a while; the HTTP side was not,
+         * so search and history reads could be issued as fast as a caller liked.
+         */
+        private double apiRequestsPerSecond = 20.0;
+
+        /** Burst allowance for API requests. */
+        private int apiBurstSize = 40;
+
+        public double getApiRequestsPerSecond() {
+            return apiRequestsPerSecond;
+        }
+
+        public void setApiRequestsPerSecond(double apiRequestsPerSecond) {
+            this.apiRequestsPerSecond = apiRequestsPerSecond;
+        }
+
+        public int getApiBurstSize() {
+            return apiBurstSize;
+        }
+
+        public void setApiBurstSize(int apiBurstSize) {
+            this.apiBurstSize = apiBurstSize;
+        }
+
         public boolean isEnabled() {
             return enabled;
         }
