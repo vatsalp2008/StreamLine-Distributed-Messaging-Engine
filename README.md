@@ -310,6 +310,8 @@ Every setting has a working default; override through environment variables.
 | `RATE_LIMIT_ENABLED` | `false` | Cap how fast one session may send |
 | `RATE_LIMIT_PER_SECOND` | `20` | Sustained messages per second per session |
 | `RATE_LIMIT_BURST` | `40` | Burst allowance above the sustained rate |
+| `RATE_LIMIT_API_PER_SECOND` | `20` | Sustained API requests per second, per client address |
+| `RATE_LIMIT_API_BURST` | `40` | Burst allowance for API requests |
 | `IDENTITY_STRICT` | `true` | Hold a session to the username it joined with |
 | `IDENTITY_UNIQUE` | `true` | Allow a username only once per room |
 | `MAX_ROOMS` | `1000` | Cap on concurrent rooms; `0` for unlimited |
@@ -361,6 +363,11 @@ someone is probing rather than mistyping.
 
 Set `BROADCAST_ENABLED=false` when benchmarking, so measured latency reflects only the
 sender's acknowledgement rather than fan-out traffic.
+
+`RATE_LIMIT_ENABLED` covers both the socket and the API. The API limit is keyed by client
+address and answers `429` once a caller runs out of budget; `/health` and `/ready` are never
+throttled, so a load balancer polling them is never told to slow down. Behind a proxy every
+caller shares one address, which is why this is opt-in rather than on by default.
 
 ## Running the benchmarks
 

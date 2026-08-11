@@ -31,6 +31,8 @@ services:
       RETENTION_DAYS: "${RETENTION_DAYS:-0}"
       # Confirm each stored message with a DELIVERED frame
       RECEIPTS_ENABLED: "${RECEIPTS_ENABLED:-false}"
+      # Covers both the socket and the HTTP API
+      RATE_LIMIT_ENABLED: "${RATE_LIMIT_ENABLED:-false}"
       # Set to "json" for machine-readable logs
       SPRING_PROFILES_ACTIVE: "${SPRING_PROFILES_ACTIVE:-}"
       # A session is held to the username it joined with. Set false only for a
