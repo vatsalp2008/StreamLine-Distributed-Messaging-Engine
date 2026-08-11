@@ -8,6 +8,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -135,6 +136,31 @@ public class ChatApiController {
                 roomId, q.trim(), username, PageRequest.of(page, effectiveSize));
 
         return ResponseEntity.ok(MessagePage.from(roomId, result));
+    }
+
+    @Operation(summary = "Delete a message",
+            description = "Removes one message from a room. The id is the one reported by a "
+                    + "DELIVERED receipt. Scoped to the room, so a token for one room cannot "
+                    + "delete another room's messages by guessing ids.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "The message was removed"),
+            @ApiResponse(responseCode = "404", description = "No such message in that room")
+    })
+    @DeleteMapping("/rooms/{roomId}/messages/{messageId}")
+    public ResponseEntity<Void> deleteMessage(
+            @Parameter(description = "Room identifier used in the WebSocket path")
+            @PathVariable String roomId,
+            @Parameter(description = "Stored message id, as carried by a DELIVERED receipt")
+            @PathVariable Long messageId) {
+
+        if (!chatService.deleteMessage(roomId, messageId)) {
+            // 404 rather than 204: a caller deleting the wrong id should hear
+            // about it instead of believing the message is gone
+            return ResponseEntity.notFound().build();
+        }
+
+        handler.announceRedaction(roomId, messageId);
+        return ResponseEntity.noContent().build();
     }
 
     @Operation(summary = "Describe one room",

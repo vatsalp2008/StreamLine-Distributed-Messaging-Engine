@@ -95,6 +95,18 @@ public class ChatService {
     }
 
     /**
+     * Deletes one message from a room.
+     *
+     * @param roomId    -String, the room the message must belong to
+     * @param messageId -Long, the stored id, as reported by a delivery receipt
+     * @return true when a message was removed
+     */
+    @Transactional
+    public boolean deleteMessage(String roomId, Long messageId) {
+        return messageRepository.deleteByIdAndRoomId(messageId, roomId) > 0;
+    }
+
+    /**
      * @param roomId -String, Representing the room to count
      * @return how many messages the room has stored
      */

@@ -44,6 +44,18 @@ public interface MessageRepository extends JpaRepository<ChatMessage, Long> {
     int deleteOlderThan(@org.springframework.data.repository.query.Param("cutoff") Instant cutoff);
 
     /**
+     * Removes one message, but only if it belongs to the given room.
+     *
+     * Scoped by room so a caller holding one room's token cannot delete a
+     * message from another simply by guessing its id.
+     *
+     * @return the number of rows removed: 1 on success, 0 if it did not exist
+     *         in that room
+     */
+    @org.springframework.data.jpa.repository.Modifying
+    long deleteByIdAndRoomId(Long id, String roomId);
+
+    /**
      * Case-insensitive substring search within a room, newest first.
      *
      * Backed by a LIKE scan rather than a full-text index, which is adequate for

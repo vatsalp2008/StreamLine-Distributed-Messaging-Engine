@@ -34,6 +34,9 @@ public class ChatServerWSHandler implements WebSocketHandler {
     /** Status of a frame announcing who is in the room */
     static final String PRESENCE = "PRESENCE";
 
+    /** Status of a frame telling a room that a message was removed */
+    static final String REDACTED = "REDACTED";
+
     /** Status of a frame confirming a message reached durable storage */
     static final String DELIVERED = "DELIVERED";
 
@@ -550,6 +553,19 @@ public class ChatServerWSHandler implements WebSocketHandler {
             }
         }
         return recipients;
+    }
+
+    /**
+     * Tells a room that one of its messages was deleted.
+     *
+     * Clients already showing the message have no other way to learn it is gone;
+     * without this they would keep displaying content that no longer exists.
+     *
+     * @param roomId    the room the message belonged to
+     * @param messageId the stored id that was removed
+     */
+    public void announceRedaction(String roomId, Long messageId) {
+        sendToRoom(roomId, null, REDACTED, String.valueOf(messageId));
     }
 
     /**
