@@ -141,4 +141,27 @@ class ServerResponseTest {
 
         assertEquals("m-9", ServerResponse.clientIdOf(receipt));
     }
+
+    // ---------- redaction ----------
+
+    @Test
+    void aRedactionIsNotADirectReply() {
+        // REDACTED arrives because somebody deleted a message, not because of
+        // anything this client sent; releasing a waiting sender on it would
+        // count a success that never happened
+        assertFalse(ServerResponse.isDirectReply(frame("REDACTED", "77")));
+    }
+
+    @Test
+    void aRedactionIsNotAFailure() {
+        // it reports an event, not a refusal, so it must not read as an error
+        assertTrue(ServerResponse.isAccepted(frame("REDACTED", "77")));
+    }
+
+    @Test
+    void anUnknownFutureStatusIsNotADirectReply() {
+        // the protocol gains frame types over time; anything unrecognised must
+        // default to "not my acknowledgement" rather than releasing a sender
+        assertFalse(ServerResponse.isDirectReply(frame("SOMETHING_NEW", "x")));
+    }
 }
