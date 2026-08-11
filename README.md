@@ -81,6 +81,7 @@ hint, never stored and never echoed back to the sender. Every frame is answered 
 | `HISTORY` | A replayed past message, sent oldest first on join |
 | `PRESENCE` | Comma-separated list of everyone currently in the room |
 | `DELIVERED` | The message reached storage; body is the stored id |
+| `REDACTED` | A stored message was deleted; body is its id |
 | `TYPING` | The username of someone composing a message |
 | `ERROR` | Validation failure or protocol violation |
 
@@ -97,6 +98,20 @@ connection. It is optional: omit it and replies simply carry no `clientId`.
 ```json
 {"status":"OK","serverTimestamp":"...","message":"alice: hello","clientId":"m-42"}
 ```
+
+### Deleting a message
+
+The id in a `DELIVERED` receipt is what the delete endpoint takes:
+
+```bash
+curl -X DELETE http://localhost:8080/api/rooms/general/messages/12345
+```
+
+Deletion is scoped to the room, so a token for one room cannot remove another
+room's messages by guessing ids. Everyone still in the room receives a
+`REDACTED` frame naming the id, since a client already showing the message has
+no other way to find out. The bundled client strikes the line through rather
+than removing it, so the surrounding conversation still reads.
 
 ### Knowing a message was stored
 
@@ -131,6 +146,7 @@ server can be exercised without any extra tooling.
 | `GET /api/rooms/{roomId}` | One room: members present, sessions, stored messages |
 | `GET /api/rooms/{roomId}/messages` | Paginated room history, newest first |
 | `GET /api/rooms/{roomId}/search` | Search a room's history by text and optionally author |
+| `DELETE /api/rooms/{roomId}/messages/{id}` | Remove one message; 204 on success, 404 if not in that room |
 | `GET /swagger-ui.html` | Interactive API documentation |
 | `GET /v3/api-docs` | OpenAPI document |
 | `GET /actuator/health` | Actuator health, including database status |
@@ -214,8 +230,9 @@ streamline.auth.room-tokens.private-room=a-different-long-secret
 
 That room then accepts only its own token, on both the WebSocket handshake and
 the room's REST endpoints; every other room continues to use the shared one.
-`GET /api/rooms` stays on the shared token, since it names rooms rather than
-revealing what was said in them.
+`GET /api/rooms` stays on the shared token, but rooms holding their own secret
+are omitted from it: naming them would disclose their existence to exactly the
+people their token is meant to exclude.
 
 ## Limits
 
@@ -392,6 +409,7 @@ every later message on that connection would be refused.
 | Room occupancy and caps | `streamline.rooms.*`, and the `limits` block of `/stats` |
 | Write queue pressure | `streamline.persistence.*`, and `writeQueueSaturation` in `/stats` |
 | Retention activity | `streamline.retention.pruned` |
+| Moderation activity | `streamline.messages.deleted`, separate from retention |
 | Structured logs | `SPRING_PROFILES_ACTIVE=json`, ECS format on stdout |
 
 Occupancy is reported next to the configured cap so an alert can fire on the ratio; a bare
