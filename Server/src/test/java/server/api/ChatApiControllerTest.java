@@ -59,7 +59,8 @@ class ChatApiControllerTest {
 
         mockMvc = MockMvcBuilders
                 .standaloneSetup(new ChatApiController(handler, chatService,
-                        new server.configure.TokenAuthenticator(new StreamlineProperties())))
+                        new server.configure.TokenAuthenticator(new StreamlineProperties()),
+                        new ChatMetrics(new io.micrometer.core.instrument.simple.SimpleMeterRegistry())))
                 .setControllerAdvice(new ApiExceptionHandler())
                 .setMessageConverters(converter)
                 .build();
@@ -75,7 +76,8 @@ class ChatApiControllerTest {
         ObjectMapper mapper = JsonMapper.builder().addModule(new JavaTimeModule()).build();
         mockMvc = MockMvcBuilders
                 .standaloneSetup(new ChatApiController(handler, chatService,
-                        new server.configure.TokenAuthenticator(properties)))
+                        new server.configure.TokenAuthenticator(properties),
+                        new ChatMetrics(new io.micrometer.core.instrument.simple.SimpleMeterRegistry())))
                 .setControllerAdvice(new ApiExceptionHandler())
                 .setMessageConverters(new MappingJackson2HttpMessageConverter(mapper))
                 .build();

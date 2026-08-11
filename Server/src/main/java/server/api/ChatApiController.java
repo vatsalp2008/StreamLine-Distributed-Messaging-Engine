@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import jakarta.servlet.http.HttpServletRequest;
+import server.configure.ChatMetrics;
 import server.configure.ChatServerWSHandler;
 import server.configure.TokenAuthenticator;
 import server.model.ChatMessage;
@@ -44,12 +45,14 @@ public class ChatApiController {
     private final ChatServerWSHandler handler;
     private final ChatService chatService;
     private final TokenAuthenticator authenticator;
+    private final ChatMetrics metrics;
 
     public ChatApiController(ChatServerWSHandler handler, ChatService chatService,
-            TokenAuthenticator authenticator) {
+            TokenAuthenticator authenticator, ChatMetrics metrics) {
         this.handler = handler;
         this.chatService = chatService;
         this.authenticator = authenticator;
+        this.metrics = metrics;
     }
 
     /**
@@ -159,6 +162,7 @@ public class ChatApiController {
             return ResponseEntity.notFound().build();
         }
 
+        metrics.recordDeleted();
         handler.announceRedaction(roomId, messageId);
         return ResponseEntity.noContent().build();
     }

@@ -21,6 +21,7 @@ public class ChatMetrics {
     private final Counter identityRejected;
     private final Counter typingSent;
     private final Counter receiptsSent;
+    private final Counter messagesDeleted;
 
     public ChatMetrics(MeterRegistry registry) {
         this.messagesAccepted = Counter.builder("streamline.messages.accepted")
@@ -45,6 +46,10 @@ public class ChatMetrics {
 
         this.receiptsSent = Counter.builder("streamline.receipts.sent")
                 .description("Messages confirmed as durably stored")
+                .register(registry);
+
+        this.messagesDeleted = Counter.builder("streamline.messages.deleted")
+                .description("Messages removed through the delete endpoint")
                 .register(registry);
 
         this.broadcastsSent = Counter.builder("streamline.broadcasts.sent")
@@ -72,6 +77,17 @@ public class ChatMetrics {
      *
      * @param recipients how many sessions the hint reached
      */
+    /**
+     * A message removed on request.
+     *
+     * Separate from retention: that expires history on a schedule, this is
+     * somebody deliberately taking a message down, which is worth being able to
+     * see on its own.
+     */
+    public void recordDeleted() {
+        messagesDeleted.increment();
+    }
+
     /** A message confirmed as durably stored. */
     public void recordReceipt() {
         receiptsSent.increment();
