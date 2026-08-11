@@ -128,6 +128,10 @@ class FakeSocket {
  * Builds the element ids the client looks up, loads it, and returns handles.
  */
 function loadClient() {
+  // Static, so a socket from a previous test would otherwise still be visible
+  // to the next one and make "never connected" assertions pass spuriously.
+  FakeSocket.last = undefined;
+
   const elements = new Map();
   const ids = ["status", "connect", "leave", "text", "send", "user", "room", "token",
     "log", "memberList", "typing", "query", "searchBtn", "clearBtn"];
