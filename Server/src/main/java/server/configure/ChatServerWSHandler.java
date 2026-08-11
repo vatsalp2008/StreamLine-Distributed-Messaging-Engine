@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.*;
+import org.springframework.web.socket.handler.ConcurrentWebSocketSessionDecorator;
 import java.io.IOException;
 import java.net.URI;
 import java.time.Instant;
@@ -85,6 +86,24 @@ public class ChatServerWSHandler implements WebSocketHandler {
     private final boolean receiptsEnabled;
     private final ChatMetrics metrics;
     private final ConcurrentHashMap<String, RateLimiter> rateLimiters = new ConcurrentHashMap<>();
+
+    /**
+     * Send-side view of each open session, keyed by session id.
+     *
+     * Frames are now written from more than one thread: acknowledgements from
+     * the WebSocket thread, delivery receipts from the persistence pool. A bare
+     * synchronized block is not enough, because the underlying endpoint can be
+     * left mid-write and the next caller sees
+     * "state [TEXT_PARTIAL_WRITING] which is an invalid state". The decorator
+     * queues sends per session and drains them one at a time.
+     */
+    private final ConcurrentHashMap<String, WebSocketSession> senders = new ConcurrentHashMap<>();
+
+    /** How long a queued send may take before the session is closed. */
+    private static final int SEND_TIME_LIMIT_MS = 5_000;
+
+    /** How much may be queued for one slow session before it is closed. */
+    private static final int SEND_BUFFER_LIMIT_BYTES = 512 * 1024;
 
     @org.springframework.beans.factory.annotation.Autowired
     public ChatServerWSHandler(Validator validator, ChatService chatService,
@@ -165,6 +184,10 @@ public class ChatServerWSHandler implements WebSocketHandler {
      */
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
+        if (session.getId() != null) {
+            senders.put(session.getId(), new ConcurrentWebSocketSessionDecorator(
+                    session, SEND_TIME_LIMIT_MS, SEND_BUFFER_LIMIT_BYTES));
+        }
         log.debug("New connection {} to room {}", session.getId(), getRoomId(session));
     }
 
@@ -631,14 +654,17 @@ public class ChatServerWSHandler implements WebSocketHandler {
 
             String jsonResponse = objectMapperMSG.writeValueAsString(response);
 
-            if (session.isOpen()) {
-                // Synchronized send to avoid concurrent send issues
-                // only one thread will send msg
-                synchronized (session) {
-                    session.sendMessage(new TextMessage(jsonResponse));
-                }
+            // Written through the decorator when there is one, so sends from the
+            // WebSocket thread and the persistence pool are serialised properly.
+            WebSocketSession sender = session.getId() == null
+                    ? session : senders.getOrDefault(session.getId(), session);
+
+            if (sender.isOpen()) {
+                sender.sendMessage(new TextMessage(jsonResponse));
             }
-        } catch (IOException e) {
+        } catch (IOException | IllegalStateException e) {
+            // IllegalStateException: the peer closed between the isOpen check and
+            // the write. Nothing to do but note it; the message is already stored.
             log.warn("Failed to send response to session {}: {}", session.getId(), e.getMessage());
         }
     }
@@ -676,6 +702,7 @@ public class ChatServerWSHandler implements WebSocketHandler {
         // buckets are keyed by session id, so drop this one or the map grows forever
         if (session.getId() != null) {
             rateLimiters.remove(session.getId());
+            senders.remove(session.getId());
         }
         log.debug("Connection {} closed from room {} ({})", session.getId(), roomId, closeStatus);
     }
