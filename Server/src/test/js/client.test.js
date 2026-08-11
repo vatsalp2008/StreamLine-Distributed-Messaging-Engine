@@ -165,3 +165,74 @@ test("a frame with no status falls back to OK", () => {
 
   assert.match(elements.get("log").children[0].className, /OK/);
 });
+
+// ---------- redaction ----------
+
+test("a redaction strikes through the message it names", () => {
+  const { client } = loadClient();
+  const line = client.append("OK", "alice: delete me");
+  client.awaitingReceipt.set("m-1", line);
+  client.handleFrame({ status: "DELIVERED", clientId: "m-1", message: "77" });
+
+  client.handleFrame({ status: "REDACTED", message: "77" });
+
+  assert.ok(line.classList.contains("redacted"));
+  assert.equal(line.querySelector(".body").textContent, "message deleted");
+});
+
+test("a redacted line keeps its place in the log", () => {
+  const { client, elements } = loadClient();
+  const line = client.append("OK", "alice: delete me");
+  client.awaitingReceipt.set("m-1", line);
+  client.handleFrame({ status: "DELIVERED", clientId: "m-1", message: "77" });
+  const before = elements.get("log").children.length;
+
+  client.handleFrame({ status: "REDACTED", message: "77" });
+
+  // removing it outright would read as a bug, and replies still refer to it
+  assert.equal(elements.get("log").children.length, before);
+});
+
+test("the stored marker becomes a deleted marker", () => {
+  const { client } = loadClient();
+  const line = client.append("OK", "alice: delete me");
+  client.awaitingReceipt.set("m-1", line);
+  client.handleFrame({ status: "DELIVERED", clientId: "m-1", message: "77" });
+
+  client.handleFrame({ status: "REDACTED", message: "77" });
+
+  assert.equal(line.querySelector(".stored").textContent, "deleted");
+});
+
+test("a redaction for a message we never saw is ignored", () => {
+  const { client, elements } = loadClient();
+  const before = elements.get("log").children.length;
+
+  // only our own messages have known ids, so most redactions are not ours
+  client.handleFrame({ status: "REDACTED", message: "999" });
+
+  assert.equal(elements.get("log").children.length, before);
+});
+
+test("a redacted id is forgotten so a repeat does nothing", () => {
+  const { client } = loadClient();
+  const line = client.append("OK", "alice: delete me");
+  client.awaitingReceipt.set("m-1", line);
+  client.handleFrame({ status: "DELIVERED", clientId: "m-1", message: "77" });
+
+  client.handleFrame({ status: "REDACTED", message: "77" });
+  client.handleFrame({ status: "REDACTED", message: "77" });
+
+  assert.equal(client.linesByStoredId.has("77"), false);
+});
+
+test("a numeric id matches the string the receipt carried", () => {
+  const { client } = loadClient();
+  const line = client.append("OK", "alice: delete me");
+  client.awaitingReceipt.set("m-1", line);
+  client.handleFrame({ status: "DELIVERED", clientId: "m-1", message: 77 });
+
+  client.handleFrame({ status: "REDACTED", message: 77 });
+
+  assert.ok(line.classList.contains("redacted"));
+});

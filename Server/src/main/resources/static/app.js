@@ -5,6 +5,11 @@
 
   // Lines awaiting a DELIVERED frame, keyed by the id sent with them.
   const awaitingReceipt = new Map();
+
+  // Lines whose stored id we know, so a later REDACTED can find them. Only our
+  // own messages appear here: a receipt is the only thing that tells this client
+  // what id the server gave a message.
+  const linesByStoredId = new Map();
   const log = $("log");
   let socket = null;
 
@@ -162,6 +167,8 @@
         mark.title = "message id " + payload.message;
         line.appendChild(mark);
         awaitingReceipt.delete(payload.clientId);
+        // remember the server's id so a later REDACTED can find this line
+        linesByStoredId.set(String(payload.message), line);
       }
       return;
     }
@@ -170,6 +177,21 @@
     // again would duplicate every line we sent.
     if (payload.clientId && awaitingReceipt.has(payload.clientId)
         && payload.status === "OK") {
+      return;
+    }
+
+    if (payload.status === "REDACTED") {
+      const line = linesByStoredId.get(String(payload.message));
+      if (line) {
+        // struck through rather than removed: a line vanishing with no trace
+        // reads as a bug, and the surrounding conversation still refers to it
+        line.classList.add("redacted");
+        const body = line.querySelector(".body");
+        if (body) body.textContent = "message deleted";
+        const mark = line.querySelector(".stored");
+        if (mark) mark.textContent = "deleted";
+        linesByStoredId.delete(String(payload.message));
+      }
       return;
     }
 
@@ -315,6 +337,7 @@
     nextClientId,
     typists,
     awaitingReceipt,
+    linesByStoredId,
     setSocket: (s) => { socket = s; },
     getSocket: () => socket
   };

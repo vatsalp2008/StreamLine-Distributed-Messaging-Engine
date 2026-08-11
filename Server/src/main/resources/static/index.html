@@ -115,6 +115,9 @@
   /* A line stays dimmed until the server confirms the write. */
   .pending { opacity: .55; }
   .stored { color: var(--ok); font-size: 11px; margin-left: 4px; }
+  /* A deleted message keeps its place so the conversation still reads. */
+  .redacted .body { text-decoration: line-through; color: var(--muted); }
+  .redacted .stored { color: var(--error); }
   .body { word-break: break-word; }
   footer {
     display: flex;
