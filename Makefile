@@ -64,6 +64,9 @@ verify: ## Run every module's tests, as CI does
 	$(MVN) clean install -f $(COMMON)
 	$(MVN) clean verify -f $(LOAD_TESTER)
 	$(MVN) clean verify -f $(ANALYZER)
+	@# The browser client is a module of this project too; leaving it out of
+	@# "verify" is how it went untested for as long as it did.
+	$(MAKE) test-js
 
 run: ## Start the server on :8080 with the browser client at /
 	$(MVN) spring-boot:run -f $(SERVER)
