@@ -225,6 +225,16 @@ other, and is tested by `make test-js` (`node --test`, included in `make verify`
 - Render user-supplied text with `textContent`, never `innerHTML`. The server
   validates usernames, but the client must not be the thing relying on that.
 
+## Verifying a change
+
+`make verify` runs all four Maven modules plus the browser client tests.
+`make smoke` additionally starts the real server, drives it with the real
+client, and asserts every message was accepted, every one was confirmed stored,
+and that edit, delete and repeat-delete answer 200, 204 and 404. Protocol and
+client changes should go through `make smoke` before being pushed: it has caught
+things no unit test did, including a message lost per run to concurrent socket
+writes.
+
 ## Trusting a forwarding header
 
 `X-Forwarded-For` is caller-supplied. `ClientAddressResolver` reads it only when
