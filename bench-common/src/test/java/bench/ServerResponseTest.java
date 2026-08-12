@@ -164,4 +164,18 @@ class ServerResponseTest {
         // default to "not my acknowledgement" rather than releasing a sender
         assertFalse(ServerResponse.isDirectReply(frame("SOMETHING_NEW", "x")));
     }
+
+    // ---------- edits ----------
+
+    @Test
+    void anEditIsNotADirectReply() {
+        // EDITED arrives because somebody changed a stored message, not in
+        // answer to anything this client sent
+        assertFalse(ServerResponse.isDirectReply(frame("EDITED", "77:new text")));
+    }
+
+    @Test
+    void anEditIsNotAFailure() {
+        assertTrue(ServerResponse.isAccepted(frame("EDITED", "77:new text")));
+    }
 }
