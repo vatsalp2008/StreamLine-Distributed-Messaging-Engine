@@ -143,7 +143,13 @@ by default because they double server-to-client frames.
 
 ## Browser client
 
-Open `http://localhost:8080/` once the server is running. The bundled client
+Open `http://localhost:8080/` once the server is running.
+
+Your own messages gain **edit** and **delete** controls once the server confirms
+them. They only appear on your own: a delivery receipt is the only thing that
+tells the client what id the server gave a message, so there is no id to act on
+for anyone else's. Both call the REST API, so they need the room's token when
+access control is on. The bundled client
 joins a room, streams messages live, and shows each frame's status, so the
 server can be exercised without any extra tooling.
 
