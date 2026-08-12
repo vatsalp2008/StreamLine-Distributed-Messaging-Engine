@@ -180,6 +180,23 @@
       return;
     }
 
+    if (payload.status === "EDITED") {
+      // "id:new text" — the id is numeric, so the first colon is the separator
+      // and any colon in the message itself is kept
+      const separator = String(payload.message).indexOf(":");
+      if (separator > 0) {
+        const id = String(payload.message).slice(0, separator);
+        const text = String(payload.message).slice(separator + 1);
+        const line = linesByStoredId.get(id);
+        if (line) {
+          const body = line.querySelector(".body");
+          if (body) body.textContent = text;
+          line.classList.add("edited");
+        }
+      }
+      return;
+    }
+
     if (payload.status === "REDACTED") {
       const line = linesByStoredId.get(String(payload.message));
       if (line) {

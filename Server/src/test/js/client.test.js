@@ -236,3 +236,59 @@ test("a numeric id matches the string the receipt carried", () => {
 
   assert.ok(line.classList.contains("redacted"));
 });
+
+// ---------- edits ----------
+
+test("an edit replaces the text of the line it names", () => {
+  const { client } = loadClient();
+  const line = client.append("OK", "alice: original");
+  client.awaitingReceipt.set("m-1", line);
+  client.handleFrame({ status: "DELIVERED", clientId: "m-1", message: "77" });
+
+  client.handleFrame({ status: "EDITED", message: "77:corrected" });
+
+  assert.equal(line.querySelector(".body").textContent, "corrected");
+  assert.ok(line.classList.contains("edited"));
+});
+
+test("a colon inside the new text is preserved", () => {
+  const { client } = loadClient();
+  const line = client.append("OK", "alice: original");
+  client.awaitingReceipt.set("m-1", line);
+  client.handleFrame({ status: "DELIVERED", clientId: "m-1", message: "77" });
+
+  client.handleFrame({ status: "EDITED", message: "77:see this: it still works" });
+
+  assert.equal(line.querySelector(".body").textContent, "see this: it still works");
+});
+
+test("an edit for an unknown id is ignored", () => {
+  const { client, elements } = loadClient();
+  const before = elements.get("log").children.length;
+
+  client.handleFrame({ status: "EDITED", message: "999:whatever" });
+
+  assert.equal(elements.get("log").children.length, before);
+});
+
+test("a malformed edit frame is ignored rather than throwing", () => {
+  const { client } = loadClient();
+
+  client.handleFrame({ status: "EDITED", message: "no separator here" });
+  client.handleFrame({ status: "EDITED", message: ":leading" });
+
+  assert.ok(true, "handled without throwing");
+});
+
+test("an edited line can still be redacted afterwards", () => {
+  const { client } = loadClient();
+  const line = client.append("OK", "alice: original");
+  client.awaitingReceipt.set("m-1", line);
+  client.handleFrame({ status: "DELIVERED", clientId: "m-1", message: "77" });
+  client.handleFrame({ status: "EDITED", message: "77:corrected" });
+
+  client.handleFrame({ status: "REDACTED", message: "77" });
+
+  assert.ok(line.classList.contains("redacted"));
+  assert.equal(line.querySelector(".body").textContent, "message deleted");
+});
