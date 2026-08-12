@@ -82,6 +82,7 @@ hint, never stored and never echoed back to the sender. Every frame is answered 
 | `PRESENCE` | Comma-separated list of everyone currently in the room |
 | `DELIVERED` | The message reached storage; body is the stored id |
 | `REDACTED` | A stored message was deleted; body is its id |
+| `EDITED` | A stored message was rewritten; body is `id:new text` |
 | `TYPING` | The username of someone composing a message |
 | `ERROR` | Validation failure or protocol violation |
 
@@ -98,6 +99,18 @@ connection. It is optional: omit it and replies simply carry no `clientId`.
 ```json
 {"status":"OK","serverTimestamp":"...","message":"alice: hello","clientId":"m-42"}
 ```
+
+### Editing a message
+
+```bash
+curl -X PATCH http://localhost:8080/api/rooms/general/messages/12345 \
+  -H 'Content-Type: application/json' -d '{"message":"corrected wording"}'
+```
+
+The original timestamp is kept, so an edit does not move the message within the
+room's history. Everyone in the room receives an `EDITED` frame carrying
+`id:new text`, and the bundled client rewrites the line in place and marks it.
+Like deletion, editing is scoped by room.
 
 ### Deleting a message
 
@@ -146,6 +159,7 @@ server can be exercised without any extra tooling.
 | `GET /api/rooms/{roomId}` | One room: members present, sessions, stored messages |
 | `GET /api/rooms/{roomId}/messages` | Paginated room history, newest first |
 | `GET /api/rooms/{roomId}/search` | Search a room's history by text and optionally author |
+| `PATCH /api/rooms/{roomId}/messages/{id}` | Replace a message's text; 200 with the updated message |
 | `DELETE /api/rooms/{roomId}/messages/{id}` | Remove one message; 204 on success, 404 if not in that room |
 | `GET /swagger-ui.html` | Interactive API documentation |
 | `GET /v3/api-docs` | OpenAPI document |
@@ -312,6 +326,9 @@ Every setting has a working default; override through environment variables.
 | `RATE_LIMIT_BURST` | `40` | Burst allowance above the sustained rate |
 | `RATE_LIMIT_API_PER_SECOND` | `20` | Sustained API requests per second, per client address |
 | `RATE_LIMIT_API_BURST` | `40` | Burst allowance for API requests |
+| `ROOM_TOKEN_FILE` | empty | `roomId=token` file, re-read while running |
+| `ROOM_TOKEN_RELOAD_MS` | `30000` | How often that file is re-read |
+| `SENDER_SWEEP_MS` | `60000` | How often send-side state for dead sessions is dropped |
 | `IDENTITY_STRICT` | `true` | Hold a session to the username it joined with |
 | `IDENTITY_UNIQUE` | `true` | Allow a username only once per room |
 | `MAX_ROOMS` | `1000` | Cap on concurrent rooms; `0` for unlimited |
@@ -363,6 +380,29 @@ someone is probing rather than mistyping.
 
 Set `BROADCAST_ENABLED=false` when benchmarking, so measured latency reflects only the
 sender's acknowledgement rather than fan-out traffic.
+
+#### Behind a proxy
+
+The API limit is keyed by client address, which behind a reverse proxy is the
+proxy's address for everyone. List your proxies to have `X-Forwarded-For`
+honoured:
+
+```properties
+streamline.proxy.trusted[0]=10.0.0.1
+```
+
+Only requests that actually arrive from a listed address have that header read,
+and the chain is walked from the right past your own proxies. With nothing
+listed the header is ignored entirely, because a caller can set it freely and
+would otherwise hand itself a fresh bucket on every request.
+
+#### Rotating a room token
+
+Room secrets set in configuration are fixed for the life of the process. Point
+`ROOM_TOKEN_FILE` at a `roomId=token` properties file and it is re-read every
+`ROOM_TOKEN_RELOAD_MS`, so a secret can be changed without restarting and
+dropping every open connection. A read failure leaves the previous tokens in
+place rather than silently downgrading a private room to the shared token.
 
 `RATE_LIMIT_ENABLED` covers both the socket and the API. The API limit is keyed by client
 address and answers `429` once a caller runs out of budget; `/health` and `/ready` are never
@@ -416,7 +456,7 @@ every later message on that connection would be refused.
 | Room occupancy and caps | `streamline.rooms.*`, and the `limits` block of `/stats` |
 | Write queue pressure | `streamline.persistence.*`, and `writeQueueSaturation` in `/stats` |
 | Retention activity | `streamline.retention.pruned` |
-| Moderation activity | `streamline.messages.deleted`, separate from retention |
+| Moderation activity | `streamline.messages.deleted`, `streamline.messages.edited` |
 | Structured logs | `SPRING_PROFILES_ACTIVE=json`, ECS format on stdout |
 
 Occupancy is reported next to the configured cap so an alert can fire on the ratio; a bare
