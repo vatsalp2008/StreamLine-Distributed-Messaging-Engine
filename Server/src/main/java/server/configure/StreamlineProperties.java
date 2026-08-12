@@ -21,6 +21,7 @@ public class StreamlineProperties {
     private final Limits limits = new Limits();
     private final Retention retention = new Retention();
     private final Receipts receipts = new Receipts();
+    private final Proxy proxy = new Proxy();
 
     public Broadcast getBroadcast() {
         return broadcast;
@@ -48,6 +49,10 @@ public class StreamlineProperties {
 
     public Receipts getReceipts() {
         return receipts;
+    }
+
+    public Proxy getProxy() {
+        return proxy;
     }
 
     public Persistence getPersistence() {
@@ -259,6 +264,26 @@ public class StreamlineProperties {
 
         public void setEnabled(boolean enabled) {
             this.enabled = enabled;
+        }
+    }
+
+    /**
+     * Reverse proxies whose forwarding headers may be believed.
+     *
+     * Empty by default: an X-Forwarded-For header is caller-supplied, so
+     * honouring it from an arbitrary source would let anyone claim a new address
+     * per request and slip the rate limit entirely. Only requests arriving from
+     * one of these addresses have their forwarding header read.
+     */
+    public static class Proxy {
+        private java.util.List<String> trusted = new java.util.ArrayList<>();
+
+        public java.util.List<String> getTrusted() {
+            return trusted;
+        }
+
+        public void setTrusted(java.util.List<String> trusted) {
+            this.trusted = trusted;
         }
     }
 
