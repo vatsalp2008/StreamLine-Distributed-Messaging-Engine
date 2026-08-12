@@ -18,8 +18,9 @@ Only messages the room accepted are stored: persistence runs after the state-mac
 a `DELIVERED` frame follows the acknowledgement once the row exists, since an `OK` only means the
 message was accepted.
 
-Deleting a message emits a `REDACTED` frame to the room, so clients already displaying it can
-show that it is gone. Deletion is scoped by room: an id from another room is a 404, not a
+Editing emits an `EDITED` frame carrying `id:new text`; the stored timestamp is left alone so an
+edit cannot reorder history. Deleting a message emits a `REDACTED` frame to the room, so clients
+already displaying it can show that it is gone. Deletion is scoped by room: an id from another room is a 404, not a
 silent success.
 
 The browser client lives in `src/main/resources/static` and is tested by `make test-js`, which
@@ -44,6 +45,8 @@ Server/
 │   │   │   ├── RoomGauges.java          # Live room occupancy and caps
 │   │   │   ├── PersistenceGauges.java   # Write queue depth and throughput
 │   │   │   ├── ApiRateLimitFilter.java  # Per-address limit on the HTTP API
+│   │   │   ├── ClientAddressResolver.java # X-Forwarded-For, only from trusted proxies
+│   │   │   ├── RoomTokenStore.java      # Room secrets, reloadable while running
 │   │   │   └── ServerStatus.java        # /health, /ready and /stats
 │   │   ├── model/ChatMessage.java       # Validated JPA entity
 │   │   ├── api/                         # Read-only HTTP API and error handling
@@ -92,6 +95,7 @@ messages survive container restarts.
 | `GET /api/rooms` | Rooms with at least one member |
 | `GET /api/rooms/{id}/messages` | Paginated history |
 | `GET /api/rooms/{id}/search` | Search history by text and optionally author |
+| `PATCH /api/rooms/{roomId}/messages/{id}` | Replace a message's text; 200, or 404 if not in that room |
 | `DELETE /api/rooms/{roomId}/messages/{id}` | Remove one message; 204, or 404 if not in that room |
 | `GET /actuator/metrics` | JVM, HTTP, `streamline.messages.*`, `streamline.rooms.*`, `streamline.persistence.*` |
 

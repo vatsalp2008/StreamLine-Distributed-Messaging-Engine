@@ -192,6 +192,13 @@ changing frames:
   lost per run. Every send now goes through a
   `ConcurrentWebSocketSessionDecorator` held in `senders`; use that, not the raw
   session, for anything sent outside the handler thread.
+- An edit keeps the original timestamp. Rewriting it would move the message
+  within the room's history, so a correction would silently reorder a
+  conversation.
+- Per-session state keyed by session id (`senders`, `rateLimiters`) is released
+  in `afterConnectionClosed`, but that callback is not guaranteed for every
+  abnormal termination. `sweepClosedSenders` exists because a missed one leaks
+  a decorator and its queue for the life of the process.
 - Nothing about tracking a write may fail the message that caused it. The
   persistence future is guarded against being null and against completing
   exceptionally, because an `OK` has already been promised by then.
@@ -213,6 +220,14 @@ other, and is tested by `make test-js` (`node --test`, included in `make verify`
   over from an earlier one.
 - Render user-supplied text with `textContent`, never `innerHTML`. The server
   validates usernames, but the client must not be the thing relying on that.
+
+## Trusting a forwarding header
+
+`X-Forwarded-For` is caller-supplied. `ClientAddressResolver` reads it only when
+the request arrived from an address in `streamline.proxy.trusted`, and walks the
+chain from the right past your own proxies. Honouring it unconditionally would
+let any caller claim a new address per request and slip the rate limit entirely,
+which is worse than the coarse bucketing it was meant to fix.
 
 ## Compose profiles
 
