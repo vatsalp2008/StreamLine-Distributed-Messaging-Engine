@@ -27,6 +27,19 @@ class ServerStatusTest {
     private StreamlineProperties properties;
     private org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor persistencePool;
 
+    @org.junit.jupiter.api.io.TempDir
+    java.nio.file.Path tempDir;
+
+    /** Rebuilds the endpoint with a token file in place. */
+    private void withTokenFile(String contents) throws IOException {
+        java.nio.file.Path file = tempDir.resolve("tokens.properties");
+        java.nio.file.Files.writeString(file, contents);
+        properties.getAuth().setRoomTokenFile(file.toString());
+        mockMvc = MockMvcBuilders.standaloneSetup(
+                new ServerStatus(handler, dataSource, properties, persistencePool,
+                        new RoomTokenStore(properties))).build();
+    }
+
     @BeforeEach
     void setUp() {
         Validator validator = Validation.buildDefaultValidatorFactory().getValidator();
@@ -178,5 +191,37 @@ class ServerStatusTest {
                 .andExpect(jsonPath("$.writeQueueSaturation").value(0.5));
 
         block.countDown();
+    }
+
+    // ---------- room token rotation ----------
+
+    @Test
+    void statsSayWhenNoTokenFileIsConfigured() throws Exception {
+        mockMvc.perform(get("/stats"))
+                .andExpect(jsonPath("$.roomTokens.fileConfigured").value(false))
+                .andExpect(jsonPath("$.roomTokens.roomsFromFile").value(0));
+    }
+
+    @Test
+    void statsReportHowManyRoomsCameFromTheFile() throws Exception {
+        withTokenFile("alpha=one\nbeta=two\n");
+
+        mockMvc.perform(get("/stats"))
+                .andExpect(jsonPath("$.roomTokens.fileConfigured").value(true))
+                .andExpect(jsonPath("$.roomTokens.roomsFromFile").value(2))
+                .andExpect(jsonPath("$.roomTokens.lastError").doesNotExist());
+    }
+
+    @Test
+    void anUnreadableFileIsReportedRatherThanLookingEmpty() throws Exception {
+        properties.getAuth().setRoomTokenFile(tempDir.resolve("missing.properties").toString());
+        mockMvc = MockMvcBuilders.standaloneSetup(
+                new ServerStatus(handler, dataSource, properties, persistencePool,
+                        new RoomTokenStore(properties))).build();
+
+        // otherwise "0 rooms" reads the same as a file that was never read
+        mockMvc.perform(get("/stats"))
+                .andExpect(jsonPath("$.roomTokens.fileConfigured").value(true))
+                .andExpect(jsonPath("$.roomTokens.lastError").isNotEmpty());
     }
 }
