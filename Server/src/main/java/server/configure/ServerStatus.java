@@ -35,13 +35,18 @@ public class ServerStatus {
     /** The bounded pool behind async persistence, used to report saturation. */
     private final Executor persistenceExecutor;
 
+    /** Reloadable room secrets, reported so rotation can be observed. */
+    private final RoomTokenStore roomTokens;
+
     public ServerStatus(ChatServerWSHandler handler, DataSource dataSource,
             StreamlineProperties properties,
-            @Qualifier(AsyncConfig.PERSISTENCE_EXECUTOR) Executor persistenceExecutor) {
+            @Qualifier(AsyncConfig.PERSISTENCE_EXECUTOR) Executor persistenceExecutor,
+            RoomTokenStore roomTokens) {
         this.handler = handler;
         this.dataSource = dataSource;
         this.properties = properties;
         this.persistenceExecutor = persistenceExecutor;
+        this.roomTokens = roomTokens;
     }
 
     /**
@@ -109,6 +114,14 @@ public class ServerStatus {
         capacity.put("retentionDays", properties.getRetention().getDays());
         body.put("limits", capacity);
         body.put("writeQueueSaturation", writeQueueSaturation());
+
+        // Rotation is a background file read; without this there is no way to
+        // tell "the file has no rooms in it" from "the file has not been read".
+        Map<String, Object> tokens = new LinkedHashMap<>();
+        tokens.put("fileConfigured", roomTokens.isFileConfigured());
+        tokens.put("roomsFromFile", roomTokens.reloadedCount());
+        tokens.put("lastError", roomTokens.lastError());
+        body.put("roomTokens", tokens);
 
         return ResponseEntity.ok(body);
     }

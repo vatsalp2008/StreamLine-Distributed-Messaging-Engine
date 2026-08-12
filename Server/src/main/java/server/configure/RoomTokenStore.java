@@ -103,7 +103,19 @@ public class RoomTokenStore {
     }
 
     /** @return how many rooms currently have a secret from the file */
-    int reloadedCount() {
+    public int reloadedCount() {
         return fromFile.get().size();
+    }
+
+    /** @return true when a token file is configured at all */
+    public boolean isFileConfigured() {
+        return source != null;
+    }
+
+    /**
+     * @return why the last reload failed, or null when the last one worked
+     */
+    public String lastError() {
+        return lastError.get();
     }
 }

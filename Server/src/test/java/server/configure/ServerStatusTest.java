@@ -38,7 +38,8 @@ class ServerStatusTest {
         persistencePool.setQueueCapacity(4);
         persistencePool.initialize();
         mockMvc = MockMvcBuilders.standaloneSetup(
-                new ServerStatus(handler, dataSource, properties, persistencePool)).build();
+                new ServerStatus(handler, dataSource, properties, persistencePool,
+                        new RoomTokenStore(properties))).build();
     }
 
     private void join(String room, String username) throws IOException {
