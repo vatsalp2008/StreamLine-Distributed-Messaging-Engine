@@ -33,6 +33,8 @@ services:
       RECEIPTS_ENABLED: "${RECEIPTS_ENABLED:-false}"
       # Covers both the socket and the HTTP API
       RATE_LIMIT_ENABLED: "${RATE_LIMIT_ENABLED:-false}"
+      # roomId=token file, re-read while running so a secret can be rotated
+      ROOM_TOKEN_FILE: "${ROOM_TOKEN_FILE:-}"
       # Set to "json" for machine-readable logs
       SPRING_PROFILES_ACTIVE: "${SPRING_PROFILES_ACTIVE:-}"
       # A session is held to the username it joined with. Set false only for a
