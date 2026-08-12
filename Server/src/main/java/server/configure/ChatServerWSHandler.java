@@ -108,6 +108,34 @@ public class ChatServerWSHandler implements WebSocketHandler {
     /** How much may be queued for one slow session before it is closed. */
     private static final int SEND_BUFFER_LIMIT_BYTES = 512 * 1024;
 
+    /**
+     * Drops send-side entries whose session is gone.
+     *
+     * Entries are normally removed in afterConnectionClosed. That callback is
+     * not guaranteed for every abnormal termination, and a missed one leaks a
+     * decorator, its queue, and the socket it wraps for the life of the process.
+     */
+    @org.springframework.scheduling.annotation.Scheduled(
+            fixedDelayString = "${streamline.ws.sender-sweep-ms:60000}")
+    public void sweepClosedSenders() {
+        int removed = 0;
+        for (Map.Entry<String, WebSocketSession> entry : senders.entrySet()) {
+            if (!entry.getValue().isOpen()) {
+                senders.remove(entry.getKey(), entry.getValue());
+                removed++;
+            }
+        }
+
+        if (removed > 0) {
+            log.debug("Swept {} closed session sender(s)", removed);
+        }
+    }
+
+    /** @return how many sessions currently have a send-side entry */
+    int trackedSenders() {
+        return senders.size();
+    }
+
     @org.springframework.beans.factory.annotation.Autowired
     public ChatServerWSHandler(Validator validator, ChatService chatService,
             StreamlineProperties properties, ObjectMapper objectMapper, ChatMetrics metrics) {
