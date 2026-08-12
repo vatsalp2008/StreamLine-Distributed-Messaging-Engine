@@ -25,6 +25,11 @@ silent success.
 
 The browser client lives in `src/main/resources/static` and is tested by `make test-js`, which
 runs `node --test` against a hand-written DOM stub — no npm install, so it runs in CI unchanged.
+Your own messages gain edit and delete controls once a receipt reports their stored id; a receipt
+is the only source of that id, so the controls cannot appear on anyone else's messages.
+
+`GET /stats` reports write-queue saturation and room-token rotation state alongside occupancy, so
+a rotation that failed to read is distinguishable from a file listing no rooms.
 
 ## Layout
 
