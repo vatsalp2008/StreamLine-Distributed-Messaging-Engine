@@ -218,6 +218,10 @@ other, and is tested by `make test-js` (`node --test`, included in `make verify`
 - Reset anything static in the harness between loads. `FakeSocket.last` leaked
   between tests and made a "never connected" assertion pass on a socket left
   over from an earlier one.
+- A delivery receipt is the only thing that tells the client what id the server
+  gave a message, so `linesByStoredId` only ever holds our own. Edit and delete
+  controls are attached there for that reason; a `REDACTED` or `EDITED` frame for
+  somebody else's message has no line to apply to and is ignored.
 - Render user-supplied text with `textContent`, never `innerHTML`. The server
   validates usernames, but the client must not be the thing relying on that.
 
