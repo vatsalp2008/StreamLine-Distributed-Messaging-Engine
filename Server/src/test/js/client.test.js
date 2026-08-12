@@ -292,3 +292,43 @@ test("an edited line can still be redacted afterwards", () => {
   assert.ok(line.classList.contains("redacted"));
   assert.equal(line.querySelector(".body").textContent, "message deleted");
 });
+
+test("a redacted line is not resurrected by a later edit", () => {
+  const { client } = loadClient();
+  const line = client.append("OK", "alice: original");
+  client.awaitingReceipt.set("m-1", line);
+  client.handleFrame({ status: "DELIVERED", clientId: "m-1", message: "77" });
+  client.handleFrame({ status: "REDACTED", message: "77" });
+
+  // the id is forgotten on redaction, so a stray edit finds nothing
+  client.handleFrame({ status: "EDITED", message: "77:back again" });
+
+  assert.equal(line.querySelector(".body").textContent, "message deleted");
+});
+
+test("editing twice keeps the latest text", () => {
+  const { client } = loadClient();
+  const line = client.append("OK", "alice: original");
+  client.awaitingReceipt.set("m-1", line);
+  client.handleFrame({ status: "DELIVERED", clientId: "m-1", message: "77" });
+
+  client.handleFrame({ status: "EDITED", message: "77:first correction" });
+  client.handleFrame({ status: "EDITED", message: "77:second correction" });
+
+  assert.equal(line.querySelector(".body").textContent, "second correction");
+});
+
+test("an edit applies to the right line when several are tracked", () => {
+  const { client } = loadClient();
+  const first = client.append("OK", "alice: one");
+  const second = client.append("OK", "alice: two");
+  client.awaitingReceipt.set("m-1", first);
+  client.handleFrame({ status: "DELIVERED", clientId: "m-1", message: "10" });
+  client.awaitingReceipt.set("m-2", second);
+  client.handleFrame({ status: "DELIVERED", clientId: "m-2", message: "11" });
+
+  client.handleFrame({ status: "EDITED", message: "11:only the second" });
+
+  assert.equal(first.querySelector(".body").textContent, "alice: one");
+  assert.equal(second.querySelector(".body").textContent, "only the second");
+});
