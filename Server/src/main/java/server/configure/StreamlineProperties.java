@@ -115,6 +115,23 @@ public class StreamlineProperties {
          */
         private java.util.Map<String, String> roomTokens = new java.util.HashMap<>();
 
+        /**
+         * Optional properties file of roomId=token, re-read while running.
+         *
+         * Tokens set in configuration are fixed for the life of the process, so
+         * rotating one needed a restart. Entries here override the configured
+         * ones and can change in place.
+         */
+        private String roomTokenFile = "";
+
+        public String getRoomTokenFile() {
+            return roomTokenFile;
+        }
+
+        public void setRoomTokenFile(String roomTokenFile) {
+            this.roomTokenFile = roomTokenFile;
+        }
+
         public java.util.Map<String, String> getRoomTokens() {
             return roomTokens;
         }

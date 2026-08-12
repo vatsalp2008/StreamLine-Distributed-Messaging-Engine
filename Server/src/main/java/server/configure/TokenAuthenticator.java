@@ -26,8 +26,29 @@ public class TokenAuthenticator {
 
     private final StreamlineProperties.Auth settings;
 
-    public TokenAuthenticator(StreamlineProperties properties) {
+    /** Reloadable room secrets; null when the authenticator is built directly. */
+    private final RoomTokenStore roomTokens;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public TokenAuthenticator(StreamlineProperties properties, RoomTokenStore roomTokens) {
         this.settings = properties.getAuth();
+        this.roomTokens = roomTokens;
+    }
+
+    /** Uses only the statically configured tokens; convenient for tests. */
+    public TokenAuthenticator(StreamlineProperties properties) {
+        this(properties, null);
+    }
+
+    /**
+     * @return the secret guarding a room, preferring a reloaded one
+     */
+    private String roomToken(String roomId) {
+        if (roomId == null) {
+            return null;
+        }
+        return roomTokens != null ? roomTokens.tokenFor(roomId)
+                : settings.getRoomTokens().get(roomId);
     }
 
     /**
@@ -90,7 +111,7 @@ public class TokenAuthenticator {
             return true;
         }
 
-        String roomToken = roomId == null ? null : settings.getRoomTokens().get(roomId);
+        String roomToken = roomToken(roomId);
         if (roomToken == null || roomToken.isBlank()) {
             return isAuthorised(presented);
         }
@@ -101,7 +122,7 @@ public class TokenAuthenticator {
      * @return true when this room has a secret of its own
      */
     public boolean hasRoomToken(String roomId) {
-        String roomToken = roomId == null ? null : settings.getRoomTokens().get(roomId);
+        String roomToken = roomToken(roomId);
         return roomToken != null && !roomToken.isBlank();
     }
 
