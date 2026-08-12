@@ -28,7 +28,8 @@ class ApiRateLimitFilterTest {
 
     private ApiRateLimitFilter filter(StreamlineProperties properties) {
         registry = new SimpleMeterRegistry();
-        return new ApiRateLimitFilter(properties, new ChatMetrics(registry));
+        return new ApiRateLimitFilter(properties, new ChatMetrics(registry),
+                new ClientAddressResolver(properties));
     }
 
     private MockHttpServletRequest request(String path, String address) {
@@ -139,5 +140,37 @@ class ApiRateLimitFilterTest {
 
         // must not throw on the way to deciding
         assertThat(passesThrough(filter, request, new MockHttpServletResponse())).isTrue();
+    }
+
+    // ---------- behind a proxy ----------
+
+    @Test
+    void callersBehindATrustedProxyGetTheirOwnBudgets() throws Exception {
+        StreamlineProperties properties = properties(true, 1, 1);
+        properties.getProxy().setTrusted(new java.util.ArrayList<>(java.util.List.of("10.0.0.1")));
+        ApiRateLimitFilter filter = filter(properties);
+
+        MockHttpServletRequest first = request("/api/rooms", "10.0.0.1");
+        first.addHeader("X-Forwarded-For", "203.0.113.1");
+        MockHttpServletRequest second = request("/api/rooms", "10.0.0.1");
+        second.addHeader("X-Forwarded-For", "203.0.113.2");
+
+        // sharing the proxy's address would let one caller throttle everyone
+        assertThat(passesThrough(filter, first, new MockHttpServletResponse())).isTrue();
+        assertThat(passesThrough(filter, second, new MockHttpServletResponse())).isTrue();
+    }
+
+    @Test
+    void aSpoofedForwardingHeaderDoesNotEscapeTheLimit() throws Exception {
+        // no proxy is trusted, so the header is somebody's invention
+        ApiRateLimitFilter filter = filter(properties(true, 1, 1));
+
+        MockHttpServletRequest first = request("/api/rooms", "203.0.113.9");
+        first.addHeader("X-Forwarded-For", "1.1.1.1");
+        MockHttpServletRequest second = request("/api/rooms", "203.0.113.9");
+        second.addHeader("X-Forwarded-For", "2.2.2.2");
+
+        assertThat(passesThrough(filter, first, new MockHttpServletResponse())).isTrue();
+        assertThat(passesThrough(filter, second, new MockHttpServletResponse())).isFalse();
     }
 }

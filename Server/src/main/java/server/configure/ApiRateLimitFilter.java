@@ -23,9 +23,11 @@ import java.util.concurrent.ConcurrentHashMap;
  * search in particular runs a LIKE scan per request, so an unthrottled caller
  * could keep the database busy indefinitely.
  *
- * Buckets are keyed by client address. That is a coarse key behind a proxy,
- * where many callers share one address, which is why the limit rides on the
- * same enable flag as the socket limiter rather than being on by default.
+ * Buckets are keyed by client address, resolved through
+ * {@link ClientAddressResolver} so callers behind a configured proxy are told
+ * apart rather than sharing one bucket. With no trusted proxy configured the
+ * socket address is used and forwarding headers are ignored, because a caller
+ * can set those freely.
  */
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE + 20)
@@ -35,11 +37,14 @@ public class ApiRateLimitFilter extends OncePerRequestFilter {
 
     private final StreamlineProperties.RateLimit settings;
     private final ChatMetrics metrics;
+    private final ClientAddressResolver addresses;
     private final ConcurrentHashMap<String, RateLimiter> limiters = new ConcurrentHashMap<>();
 
-    public ApiRateLimitFilter(StreamlineProperties properties, ChatMetrics metrics) {
+    public ApiRateLimitFilter(StreamlineProperties properties, ChatMetrics metrics,
+            ClientAddressResolver addresses) {
         this.settings = properties.getRateLimit();
         this.metrics = metrics;
+        this.addresses = addresses;
     }
 
     @Override
@@ -75,10 +80,12 @@ public class ApiRateLimitFilter extends OncePerRequestFilter {
         chain.doFilter(request, response);
     }
 
-    /** @return the address a bucket is kept for */
+    /**
+     * @return the address a bucket is kept for, resolved through any trusted
+     *         proxy so callers sharing one do not share a bucket
+     */
     private String clientKey(HttpServletRequest request) {
-        String address = request.getRemoteAddr();
-        return address == null ? "unknown" : address;
+        return addresses.resolve(request);
     }
 
     /** @return how many buckets are being tracked, for tests and diagnostics */
