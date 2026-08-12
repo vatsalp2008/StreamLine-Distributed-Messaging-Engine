@@ -410,6 +410,10 @@ Room secrets set in configuration are fixed for the life of the process. Point
 dropping every open connection. A read failure leaves the previous tokens in
 place rather than silently downgrading a private room to the shared token.
 
+`GET /stats` reports `roomTokens.fileConfigured`, `roomTokens.roomsFromFile` and
+`roomTokens.lastError`, so a rotation that silently failed to read is
+distinguishable from a file that genuinely lists no rooms.
+
 `RATE_LIMIT_ENABLED` covers both the socket and the API. The API limit is keyed by client
 address and answers `429` once a caller runs out of budget; `/health` and `/ready` are never
 throttled, so a load balancer polling them is never told to slow down. Behind a proxy every
