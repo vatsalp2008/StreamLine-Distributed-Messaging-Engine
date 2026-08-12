@@ -35,6 +35,9 @@ public class ChatServerWSHandler implements WebSocketHandler {
     /** Status of a frame announcing who is in the room */
     static final String PRESENCE = "PRESENCE";
 
+    /** Status of a frame telling a room that a message was rewritten */
+    static final String EDITED = "EDITED";
+
     /** Status of a frame telling a room that a message was removed */
     static final String REDACTED = "REDACTED";
 
@@ -576,6 +579,20 @@ public class ChatServerWSHandler implements WebSocketHandler {
             }
         }
         return recipients;
+    }
+
+    /**
+     * Tells a room that one of its messages was rewritten.
+     *
+     * Carries the id and the new text together, so a client showing the old
+     * version can replace it without going back to the API for it.
+     *
+     * @param roomId    the room the message belongs to
+     * @param messageId the stored id that changed
+     * @param text      the replacement body
+     */
+    public void announceEdit(String roomId, Long messageId, String text) {
+        sendToRoom(roomId, null, EDITED, messageId + ":" + text);
     }
 
     /**

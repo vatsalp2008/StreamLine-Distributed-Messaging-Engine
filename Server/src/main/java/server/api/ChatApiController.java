@@ -10,6 +10,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -143,6 +144,33 @@ public class ChatApiController {
                 roomId, q.trim(), username, PageRequest.of(page, effectiveSize));
 
         return ResponseEntity.ok(MessagePage.from(roomId, result));
+    }
+
+    @Operation(summary = "Edit a message",
+            description = "Replaces the text of one message. The id is the one reported by a "
+                    + "DELIVERED receipt. The original timestamp is kept, so an edit does not "
+                    + "reorder the room's history.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "The updated message"),
+            @ApiResponse(responseCode = "400", description = "Missing or overlong text"),
+            @ApiResponse(responseCode = "404", description = "No such message in that room")
+    })
+    @PatchMapping("/rooms/{roomId}/messages/{messageId}")
+    public ResponseEntity<MessageView> editMessage(
+            @Parameter(description = "Room identifier used in the WebSocket path")
+            @PathVariable String roomId,
+            @Parameter(description = "Stored message id, as carried by a DELIVERED receipt")
+            @PathVariable Long messageId,
+            @org.springframework.web.bind.annotation.RequestBody
+            @jakarta.validation.Valid EditRequest request) {
+
+        return chatService.editMessage(roomId, messageId, request.message())
+                .map(updated -> {
+                    metrics.recordEdited();
+                    handler.announceEdit(roomId, messageId, updated.getMessage());
+                    return ResponseEntity.ok(MessageView.from(updated));
+                })
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @Operation(summary = "Delete a message",

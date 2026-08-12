@@ -95,6 +95,31 @@ public class ChatService {
     }
 
     /**
+     * Replaces the text of one message in a room.
+     *
+     * Scoped by room for the same reason deletion is: a token for one room must
+     * not reach another room's messages by guessing ids.
+     *
+     * @param roomId    -String, the room the message must belong to
+     * @param messageId -Long, the stored id, as reported by a delivery receipt
+     * @param text      -String, the replacement body
+     * @return the updated message, or empty when it does not exist in that room
+     */
+    @Transactional
+    public java.util.Optional<ChatMessage> editMessage(String roomId, Long messageId,
+            String text) {
+
+        return messageRepository.findById(messageId)
+                .filter(message -> roomId.equals(message.getRoomId()))
+                .map(message -> {
+                    message.setMessage(text);
+                    // the timestamp is when the author wrote it, so it stays put;
+                    // rewriting it would reorder the room's history around an edit
+                    return messageRepository.save(message);
+                });
+    }
+
+    /**
      * Deletes one message from a room.
      *
      * @param roomId    -String, the room the message must belong to
