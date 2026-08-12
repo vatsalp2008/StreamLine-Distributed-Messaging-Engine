@@ -151,6 +151,18 @@ smoke: common ## Start the server, run a short benchmark, assert every message w
 		[ "$$got" = "$(SMOKE_MESSAGES)" ] && break; \
 		sleep 1; \
 	done; true
+	@# Edit and delete are reachable only over HTTP, so a break there shows up
+	@# nowhere in the benchmark. Run them while the server is still up.
+	@echo "==> moderation endpoints"
+	@edited=$$(curl -s -o /dev/null -w '%{http_code}' -X PATCH \
+		-H 'Content-Type: application/json' -d '{"message":"edited by smoke"}' \
+		http://localhost:$(SMOKE_PORT)/api/rooms/1/messages/1); \
+	deleted=$$(curl -s -o /dev/null -w '%{http_code}' -X DELETE \
+		http://localhost:$(SMOKE_PORT)/api/rooms/1/messages/1); \
+	gone=$$(curl -s -o /dev/null -w '%{http_code}' -X DELETE \
+		http://localhost:$(SMOKE_PORT)/api/rooms/1/messages/1); \
+	echo "$$edited $$deleted $$gone" > $(SMOKE_DIR)/moderation.txt; \
+	echo "    edit=$$edited delete=$$deleted repeat-delete=$$gone"
 	@kill $$(cat $(SMOKE_DIR)/server.pid) 2>/dev/null || true
 	@for i in $$(seq 1 20); do \
 		lsof -ti :$(SMOKE_PORT) >/dev/null 2>&1 || break; \
@@ -169,6 +181,12 @@ smoke: common ## Start the server, run a short benchmark, assert every message w
 		exit 1; \
 	fi; \
 	echo "==> receipts confirmed: $$receipts/$(SMOKE_MESSAGES)"
+	@read -r edited deleted gone < $(SMOKE_DIR)/moderation.txt; \
+	if [ "$$edited" != "200" ] || [ "$$deleted" != "204" ] || [ "$$gone" != "404" ]; then \
+		echo "SMOKE FAILED: edit=$$edited delete=$$deleted repeat-delete=$$gone (want 200/204/404)"; \
+		exit 1; \
+	fi; \
+	echo "==> moderation confirmed: edit 200, delete 204, repeat 404"
 
 latency: common ## Latency benchmark; writes Result/*.csv
 	$(MVN) -q compile exec:java -f $(ANALYZER) \
