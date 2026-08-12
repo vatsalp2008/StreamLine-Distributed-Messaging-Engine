@@ -140,6 +140,49 @@
    * Routes one raw frame from the server.
    * Named rather than inline so it can be driven directly by tests.
    */
+  /**
+   * Adds edit and delete controls to one of our own messages.
+   *
+   * Only our own: a receipt is the only thing that tells this client what id
+   * the server gave a message, so there is no id to act on for anyone else's.
+   */
+  function addOwnMessageControls(line, storedId) {
+    const room = encodeURIComponent($("room").value.trim() || "1");
+    const base = "/api/rooms/" + room + "/messages/" + encodeURIComponent(storedId);
+
+    const actions = document.createElement("span");
+    actions.className = "actions";
+
+    const edit = document.createElement("button");
+    edit.className = "link";
+    edit.textContent = "edit";
+    edit.addEventListener("click", async () => {
+      const body = line.querySelector(".body");
+      const current = body ? body.textContent : "";
+      const next = prompt("Edit message", current);
+      if (next === null || next.trim() === "") return;
+
+      const response = await fetch(base, {
+        method: "PATCH",
+        headers: Object.assign({ "Content-Type": "application/json" }, authHeaders()),
+        body: JSON.stringify({ message: next })
+      });
+      if (!response.ok) append("ERROR", "Edit failed: " + response.status);
+    });
+
+    const remove = document.createElement("button");
+    remove.className = "link";
+    remove.textContent = "delete";
+    remove.addEventListener("click", async () => {
+      const response = await fetch(base, { method: "DELETE", headers: authHeaders() });
+      if (!response.ok) append("ERROR", "Delete failed: " + response.status);
+    });
+
+    actions.appendChild(edit);
+    actions.appendChild(remove);
+    line.appendChild(actions);
+  }
+
   function handleRawFrame(data) {
     let payload;
     try {
@@ -169,6 +212,8 @@
         awaitingReceipt.delete(payload.clientId);
         // remember the server's id so a later REDACTED can find this line
         linesByStoredId.set(String(payload.message), line);
+        // the id is also what edit and delete act on, so offer them now
+        addOwnMessageControls(line, String(payload.message));
       }
       return;
     }
@@ -348,6 +393,7 @@
     renderTyping,
     handleFrame,
     handleRawFrame,
+    addOwnMessageControls,
     runSearch,
     append,
     frame,

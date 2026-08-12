@@ -119,6 +119,22 @@
   .redacted .body { text-decoration: line-through; color: var(--muted); }
   /* Marks a line whose text was changed after it was sent. */
   .edited .body::after { content: " (edited)"; color: var(--muted); font-size: 11px; }
+  /* Controls appear on our own messages, once their stored id is known. */
+  .actions { margin-left: 6px; display: inline-flex; gap: 6px; }
+  .actions .link {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--muted);
+    font-size: 11px;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+  .actions .link:hover { color: var(--accent); }
+  .redacted .actions { display: none; }
+  /* Frame kinds that had no colour of their own. */
+  .DELIVERED .tag { color: var(--ok); border-color: var(--ok); }
+  .EDITED .tag, .REDACTED .tag { color: var(--muted); }
   .redacted .stored { color: var(--error); }
   .body { word-break: break-word; }
   footer {

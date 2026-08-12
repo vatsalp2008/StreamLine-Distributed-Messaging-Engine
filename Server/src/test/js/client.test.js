@@ -332,3 +332,69 @@ test("an edit applies to the right line when several are tracked", () => {
   assert.equal(first.querySelector(".body").textContent, "alice: one");
   assert.equal(second.querySelector(".body").textContent, "only the second");
 });
+
+// ---------- acting on our own messages ----------
+
+/** Sends a message and confirms it, returning the line and its stored id. */
+function ownConfirmedLine(handles, storedId) {
+  const line = handles.client.append("OK", "alice: mine");
+  handles.client.awaitingReceipt.set("m-1", line);
+  handles.client.handleFrame({ status: "DELIVERED", clientId: "m-1", message: storedId });
+  return line;
+}
+
+test("controls appear on our own message once it is confirmed", () => {
+  const handles = loadClient();
+
+  const line = ownConfirmedLine(handles, "77");
+
+  const actions = line.querySelector(".actions");
+  assert.ok(actions, "expected edit and delete controls");
+  assert.deepEqual(actions.children.map((c) => c.textContent), ["edit", "delete"]);
+});
+
+test("someone else's message gets no controls", () => {
+  const handles = loadClient();
+
+  handles.client.handleFrame({ status: "BROADCAST", message: "bob: theirs" });
+
+  // we never learn the id of another client's message, so there is nothing to act on
+  const log = handles.elements.get("log");
+  const line = log.children[log.children.length - 1];
+  assert.equal(line.querySelector(".actions"), null);
+});
+
+test("delete calls the endpoint for that message", async () => {
+  const handles = loadClient();
+  handles.elements.get("room").value = "general";
+  const line = ownConfirmedLine(handles, "77");
+
+  line.querySelector(".actions").children[1].dispatch("click");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const call = handles.fetchCalls[handles.fetchCalls.length - 1];
+  assert.equal(call.url, "/api/rooms/general/messages/77");
+  assert.equal(call.options.method, "DELETE");
+});
+
+test("delete sends the token when one is set", async () => {
+  const handles = loadClient();
+  handles.elements.get("token").value = "s3cret";
+  const line = ownConfirmedLine(handles, "77");
+
+  line.querySelector(".actions").children[1].dispatch("click");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const call = handles.fetchCalls[handles.fetchCalls.length - 1];
+  assert.equal(call.options.headers["X-Streamline-Token"], "s3cret");
+});
+
+test("a redacted line hides its controls", () => {
+  const handles = loadClient();
+  const line = ownConfirmedLine(handles, "77");
+
+  handles.client.handleFrame({ status: "REDACTED", message: "77" });
+
+  // the CSS hides them; the class is what the test can assert on
+  assert.ok(line.classList.contains("redacted"));
+});
