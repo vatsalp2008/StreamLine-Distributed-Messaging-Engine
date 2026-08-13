@@ -82,6 +82,7 @@ hint, never stored and never echoed back to the sender. Every frame is answered 
 | `PRESENCE` | Comma-separated list of everyone currently in the room |
 | `DELIVERED` | The message reached storage; body is the stored id |
 | `REDACTED` | A stored message was deleted; body is its id |
+| `REACTIONS` | A message's reactions changed; body is `emoji:count,...` |
 | `EDITED` | A stored message was rewritten; body is `id:new text` |
 | `TYPING` | The username of someone composing a message |
 | `ERROR` | Validation failure or protocol violation |
@@ -120,6 +121,22 @@ room's history. Everyone in the room receives an `EDITED` frame carrying
 Like deletion, editing is scoped by room. The stored row records `editedAt`, which
 the API returns on every message, so an edited message stays identifiable after a
 restart rather than only for as long as a client had the page open.
+
+### Reacting to a message
+
+```bash
+curl -X POST http://localhost:8080/api/rooms/general/messages/12345/reactions \
+  -H 'Content-Type: application/json' -d '{"username":"bob","emoji":"thumbsup"}'
+```
+
+Reacting twice the same way is a no-op rather than an error, so a double click
+does not count twice. Removing returns 404 when there was nothing to remove, so
+a client can tell a change from a no-op — the browser client uses that to make
+one click toggle. Every change broadcasts a `REACTIONS` frame carrying the whole
+grouped set, so a client that missed a frame still ends up correct.
+
+Reactions are deleted with their message by a foreign key, so they cannot
+outlive it.
 
 ### Deleting a message
 
@@ -174,6 +191,8 @@ server can be exercised without any extra tooling.
 | `GET /api/rooms/{roomId}` | One room: members present, sessions, stored messages |
 | `GET /api/rooms/{roomId}/messages` | Paginated room history, newest first |
 | `GET /api/rooms/{roomId}/search` | Search a room's history by text and optionally author |
+| `POST /api/rooms/{roomId}/messages/{id}/reactions` | React to a message; 200 with the grouped reactions |
+| `DELETE /api/rooms/{roomId}/messages/{id}/reactions` | Take a reaction back; 404 if there was none |
 | `PATCH /api/rooms/{roomId}/messages/{id}` | Replace a message's text; 200 with the updated message |
 | `DELETE /api/rooms/{roomId}/messages/{id}` | Remove one message; 204 on success, 404 if not in that room |
 | `GET /swagger-ui.html` | Interactive API documentation |
@@ -476,6 +495,7 @@ every later message on that connection would be refused.
 | Write queue pressure | `streamline.persistence.*`, and `writeQueueSaturation` in `/stats` |
 | Retention activity | `streamline.retention.pruned` |
 | Moderation activity | `streamline.messages.deleted`, `streamline.messages.edited` |
+| Reactions | `streamline.reactions.added` |
 | Structured logs | `SPRING_PROFILES_ACTIVE=json`, ECS format on stdout |
 
 Occupancy is reported next to the configured cap so an alert can fire on the ratio; a bare
