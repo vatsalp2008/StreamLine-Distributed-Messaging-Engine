@@ -18,7 +18,8 @@ Only messages the room accepted are stored: persistence runs after the state-mac
 a `DELIVERED` frame follows the acknowledgement once the row exists, since an `OK` only means the
 message was accepted.
 
-Editing emits an `EDITED` frame carrying `id:new text`; the stored timestamp is left alone so an
+Frames referring to a stored message carry its id in `messageId`, and replayed history carries
+`editedAt` when the message was rewritten. Editing emits an `EDITED` frame carrying `id:new text`; the stored timestamp is left alone so an
 edit cannot reorder history. Deleting a message emits a `REDACTED` frame to the room, so clients
 already displaying it can show that it is gone. Deletion is scoped by room: an id from another room is a 404, not a
 silent success.

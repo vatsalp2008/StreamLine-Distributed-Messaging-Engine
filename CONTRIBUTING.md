@@ -218,8 +218,12 @@ other, and is tested by `make test-js` (`node --test`, included in `make verify`
 - Reset anything static in the harness between loads. `FakeSocket.last` leaked
   between tests and made a "never connected" assertion pass on a socket left
   over from an earlier one.
-- A delivery receipt is the only thing that tells the client what id the server
-  gave a message, so `linesByStoredId` only ever holds our own. Edit and delete
+- Frames that refer to a stored message carry `messageId`. Prefer that field over
+  parsing the body: `EDITED` still packs `id:new text` for readability, and a
+  message whose own text begins with digits and a colon would otherwise mislead
+  a parser.
+- A delivery receipt used to be the only thing that told the client what id the
+  server gave a message, so `linesByStoredId` only ever held our own. Edit and delete
   controls are attached there for that reason; a `REDACTED` or `EDITED` frame for
   somebody else's message has no line to apply to and is ignored.
 - Render user-supplied text with `textContent`, never `innerHTML`. The server
@@ -234,6 +238,21 @@ and that edit, delete and repeat-delete answer 200, 204 and 404. Protocol and
 client changes should go through `make smoke` before being pushed: it has caught
 things no unit test did, including a message lost per run to concurrent socket
 writes.
+
+## Testing against Postgres
+
+Most tests run on H2. `make test-postgres` starts a Postgres container and runs
+`PostgresSchemaTest` against it; the test skips itself unless `POSTGRES_TEST_URL`
+is set, so a machine without Docker still gets a clean build.
+
+It deliberately does not use Testcontainers. That pulls in a Docker client which
+negotiates an API version with whatever daemon is installed, and it failed here
+with "client version 1.32 is too old" — a mismatch that has nothing to do with
+the code under test. Supplying a URL keeps the test honest and portable.
+
+Anything touching the schema, a derived query, or a migration should be checked
+there as well as on H2: the two disagree about generated DDL and about which SQL
+they accept.
 
 ## Trusting a forwarding header
 
