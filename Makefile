@@ -172,13 +172,22 @@ smoke: common ## Start the server, run a short benchmark, assert every message w
 	@# Edit and delete are reachable only over HTTP, so a break there shows up
 	@# nowhere in the benchmark. Run them while the server is still up.
 	@echo "==> moderation endpoints"
-	@edited=$$(curl -s -o /dev/null -w '%{http_code}' -X PATCH \
+	@# Ask the room which id it actually holds. Assuming id 1 is in room 1 is a
+	@# coin flip once the benchmark spreads traffic over several rooms, and the
+	@# room scoping correctly 404s an id belonging to another room.
+	@id=$$(curl -s "http://localhost:$(SMOKE_PORT)/api/rooms/1/messages?size=1" \
+		| sed -n 's/.*"id":\([0-9]*\).*/\1/p' | head -1); \
+	if [ -z "$$id" ]; then \
+		echo "SMOKE FAILED: room 1 reported no message id to moderate"; \
+		exit 1; \
+	fi; \
+	edited=$$(curl -s -o /dev/null -w '%{http_code}' -X PATCH \
 		-H 'Content-Type: application/json' -d '{"message":"edited by smoke"}' \
-		http://localhost:$(SMOKE_PORT)/api/rooms/1/messages/1); \
+		http://localhost:$(SMOKE_PORT)/api/rooms/1/messages/$$id); \
 	deleted=$$(curl -s -o /dev/null -w '%{http_code}' -X DELETE \
-		http://localhost:$(SMOKE_PORT)/api/rooms/1/messages/1); \
+		http://localhost:$(SMOKE_PORT)/api/rooms/1/messages/$$id); \
 	gone=$$(curl -s -o /dev/null -w '%{http_code}' -X DELETE \
-		http://localhost:$(SMOKE_PORT)/api/rooms/1/messages/1); \
+		http://localhost:$(SMOKE_PORT)/api/rooms/1/messages/$$id); \
 	echo "$$edited $$deleted $$gone" > $(SMOKE_DIR)/moderation.txt; \
 	echo "    edit=$$edited delete=$$deleted repeat-delete=$$gone"
 	@kill $$(cat $(SMOKE_DIR)/server.pid) 2>/dev/null || true
