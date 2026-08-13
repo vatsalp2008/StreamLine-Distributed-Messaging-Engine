@@ -93,8 +93,13 @@ class ChatApiControllerTest {
                 """.formatted(username)));
     }
 
+    private static final java.util.concurrent.atomic.AtomicLong FIXTURE_IDS =
+            new java.util.concurrent.atomic.AtomicLong();
+
     private ChatMessage stored(String username, String text, String roomId) {
         ChatMessage msg = new ChatMessage();
+        // the database assigns one, and the API now publishes it
+        msg.setId(FIXTURE_IDS.incrementAndGet());
         msg.setUsername(username);
         msg.setMessage(text);
         msg.setTimestamp(Instant.parse("2026-08-06T10:00:00Z"));
@@ -150,14 +155,16 @@ class ChatApiControllerTest {
     }
 
     @Test
-    void messagesResponseOmitsInternalEntityFields() throws Exception {
+    void messagesResponseCarriesTheIdButNotOtherInternals() throws Exception {
         Page<ChatMessage> page = new PageImpl<>(
                 List.of(stored("alice", "hello", "general")), PageRequest.of(0, 50), 1);
         when(chatService.getMessagePage(anyString(), any(Pageable.class))).thenReturn(page);
 
         mockMvc.perform(get("/api/rooms/general/messages"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.messages[0].id").doesNotExist())
+                // the id is part of the contract: edit, delete and reactions all
+                // take one, so a client reading history needs it
+                .andExpect(jsonPath("$.messages[0].id").exists())
                 .andExpect(jsonPath("$.messages[0].userId").doesNotExist());
     }
 
