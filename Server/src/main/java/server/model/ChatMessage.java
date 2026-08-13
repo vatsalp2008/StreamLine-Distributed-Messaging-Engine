@@ -55,6 +55,16 @@ public class ChatMessage {
     private String roomId;
 
     /**
+     * When the message was last rewritten, or null if it never was.
+     *
+     * Nullable rather than defaulting to the send time: null says "never
+     * edited", which a reader cannot infer from a timestamp equal to the
+     * original one.
+     */
+    @Column(name = "edited_at")
+    private Instant editedAt;
+
+    /**
      * Optional identifier the sender attaches so it can match a reply to the
      * message that caused it.
      *
@@ -149,6 +159,14 @@ public class ChatMessage {
 
     public void setClientId(String clientId) {
         this.clientId = clientId;
+    }
+
+    public Instant getEditedAt() {
+        return editedAt;
+    }
+
+    public void setEditedAt(Instant editedAt) {
+        this.editedAt = editedAt;
     }
 
     public String getRoomId() {

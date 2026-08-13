@@ -21,8 +21,17 @@ public class ChatService {
 
     private final MessageRepository messageRepository;
 
+    /** Injectable so a test can assert the recorded edit time. */
+    private final java.time.Clock clock;
+
+    @org.springframework.beans.factory.annotation.Autowired
     public ChatService(MessageRepository messageRepository) {
+        this(messageRepository, java.time.Clock.systemUTC());
+    }
+
+    ChatService(MessageRepository messageRepository, java.time.Clock clock) {
         this.messageRepository = messageRepository;
+        this.clock = clock;
     }
 
     /**
@@ -115,6 +124,7 @@ public class ChatService {
                     message.setMessage(text);
                     // the timestamp is when the author wrote it, so it stays put;
                     // rewriting it would reorder the room's history around an edit
+                    message.setEditedAt(clock.instant());
                     return messageRepository.save(message);
                 });
     }
