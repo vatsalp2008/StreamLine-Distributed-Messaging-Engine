@@ -170,6 +170,15 @@
       if (!response.ok) append("ERROR", "Edit failed: " + response.status);
     });
 
+    const reactButton = document.createElement("button");
+    reactButton.className = "link";
+    reactButton.textContent = "react";
+    reactButton.addEventListener("click", () => {
+      const emoji = prompt("React with", "thumbsup");
+      if (emoji && emoji.trim() !== "") react(storedId, emoji.trim());
+    });
+    actions.appendChild(reactButton);
+
     const remove = document.createElement("button");
     remove.className = "link";
     remove.textContent = "delete";
@@ -181,6 +190,53 @@
     actions.appendChild(edit);
     actions.appendChild(remove);
     line.appendChild(actions);
+  }
+
+  /**
+   * Draws the reaction chips under a message.
+   *
+   * The server sends the whole grouped set on every change rather than a delta,
+   * so this replaces what is there instead of trying to patch it.
+   */
+  function renderReactions(line, summary, storedId) {
+    let bar = line.querySelector(".reactions");
+    if (!bar) {
+      bar = document.createElement("span");
+      bar.className = "reactions";
+      line.appendChild(bar);
+    }
+    bar.innerHTML = "";
+
+    const groups = (summary || "").split(",").filter((g) => g.length > 0);
+    for (const group of groups) {
+      const separator = group.lastIndexOf(":");
+      if (separator < 0) continue;
+
+      const emoji = group.slice(0, separator);
+      const count = group.slice(separator + 1);
+
+      const chip = document.createElement("button");
+      chip.className = "chip";
+      chip.textContent = emoji + " " + count;
+      chip.addEventListener("click", () => react(storedId, emoji));
+      bar.appendChild(chip);
+    }
+  }
+
+  /** Adds our reaction to a message, or takes it back if we already reacted. */
+  async function react(storedId, emoji) {
+    const room = encodeURIComponent($("room").value.trim() || "1");
+    const url = "/api/rooms/" + room + "/messages/" + encodeURIComponent(storedId)
+      + "/reactions";
+    const body = JSON.stringify({ username: $("user").value.trim(), emoji: emoji });
+    const headers = Object.assign({ "Content-Type": "application/json" }, authHeaders());
+
+    // Try to take it back first; a 404 means we had not reacted, so add instead.
+    const removed = await fetch(url, { method: "DELETE", headers, body });
+    if (removed.status === 404) {
+      const added = await fetch(url, { method: "POST", headers, body });
+      if (!added.ok) append("ERROR", "Reaction failed: " + added.status);
+    }
   }
 
   function handleRawFrame(data) {
@@ -241,6 +297,12 @@
           line.classList.add("edited");
         }
       }
+      return;
+    }
+
+    if (payload.status === "REACTIONS") {
+      const line = linesByStoredId.get(String(payload.messageId));
+      if (line) renderReactions(line, payload.message, String(payload.messageId));
       return;
     }
 
@@ -409,6 +471,8 @@
     renderTyping,
     handleFrame,
     handleRawFrame,
+    renderReactions,
+    react,
     addOwnMessageControls,
     runSearch,
     append,

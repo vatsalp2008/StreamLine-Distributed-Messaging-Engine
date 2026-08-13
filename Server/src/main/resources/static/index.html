@@ -131,6 +131,18 @@
     text-decoration: underline;
   }
   .actions .link:hover { color: var(--accent); }
+  .reactions { margin-left: 6px; display: inline-flex; gap: 4px; }
+  .reactions .chip {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0 6px;
+    color: var(--text);
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .reactions .chip:hover { border-color: var(--accent); }
+  .redacted .reactions { display: none; }
   .redacted .actions { display: none; }
   /* Frame kinds that had no colour of their own. */
   .DELIVERED .tag { color: var(--ok); border-color: var(--ok); }
