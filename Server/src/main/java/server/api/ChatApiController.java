@@ -11,6 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -144,6 +145,56 @@ public class ChatApiController {
                 roomId, q.trim(), username, PageRequest.of(page, effectiveSize));
 
         return ResponseEntity.ok(MessagePage.from(roomId, result));
+    }
+
+    @Operation(summary = "React to a message",
+            description = "Adds a reaction. Reacting twice the same way is a no-op rather "
+                    + "than an error. Returns the message's reactions grouped by emoji.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Reactions after the change"),
+            @ApiResponse(responseCode = "400", description = "Missing or invalid username/emoji"),
+            @ApiResponse(responseCode = "404", description = "No such message in that room")
+    })
+    @PostMapping("/rooms/{roomId}/messages/{messageId}/reactions")
+    public ResponseEntity<List<ReactionSummary>> addReaction(
+            @Parameter(description = "Room identifier used in the WebSocket path")
+            @PathVariable String roomId,
+            @Parameter(description = "Stored message id")
+            @PathVariable Long messageId,
+            @org.springframework.web.bind.annotation.RequestBody
+            @jakarta.validation.Valid ReactionRequest request) {
+
+        return chatService.addReaction(roomId, messageId, request.username(), request.emoji())
+                .map(summaries -> {
+                    metrics.recordReaction();
+                    handler.announceReactions(roomId, messageId, summaries);
+                    return ResponseEntity.ok(summaries);
+                })
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    @Operation(summary = "Take back a reaction",
+            description = "Removes one person's reaction. 404 when they had not reacted that "
+                    + "way, so a client can tell a no-op from a change.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Reactions after the change"),
+            @ApiResponse(responseCode = "404", description = "No such reaction")
+    })
+    @DeleteMapping("/rooms/{roomId}/messages/{messageId}/reactions")
+    public ResponseEntity<List<ReactionSummary>> removeReaction(
+            @Parameter(description = "Room identifier used in the WebSocket path")
+            @PathVariable String roomId,
+            @Parameter(description = "Stored message id")
+            @PathVariable Long messageId,
+            @org.springframework.web.bind.annotation.RequestBody
+            @jakarta.validation.Valid ReactionRequest request) {
+
+        return chatService.removeReaction(roomId, messageId, request.username(), request.emoji())
+                .map(summaries -> {
+                    handler.announceReactions(roomId, messageId, summaries);
+                    return ResponseEntity.ok(summaries);
+                })
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @Operation(summary = "Edit a message",

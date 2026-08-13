@@ -23,6 +23,7 @@ public class ChatMetrics {
     private final Counter receiptsSent;
     private final Counter messagesDeleted;
     private final Counter messagesEdited;
+    private final Counter reactionsAdded;
 
     public ChatMetrics(MeterRegistry registry) {
         this.messagesAccepted = Counter.builder("streamline.messages.accepted")
@@ -55,6 +56,10 @@ public class ChatMetrics {
 
         this.messagesEdited = Counter.builder("streamline.messages.edited")
                 .description("Messages rewritten through the edit endpoint")
+                .register(registry);
+
+        this.reactionsAdded = Counter.builder("streamline.reactions.added")
+                .description("Reactions recorded on messages")
                 .register(registry);
 
         this.broadcastsSent = Counter.builder("streamline.broadcasts.sent")
@@ -91,6 +96,11 @@ public class ChatMetrics {
      */
     public void recordDeleted() {
         messagesDeleted.increment();
+    }
+
+    /** A reaction recorded on a message. */
+    public void recordReaction() {
+        reactionsAdded.increment();
     }
 
     /** A message rewritten on request. */

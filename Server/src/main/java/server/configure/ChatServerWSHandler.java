@@ -35,6 +35,9 @@ public class ChatServerWSHandler implements WebSocketHandler {
     /** Status of a frame announcing who is in the room */
     static final String PRESENCE = "PRESENCE";
 
+    /** Status of a frame carrying a message's reactions after a change */
+    static final String REACTIONS = "REACTIONS";
+
     /** Status of a frame telling a room that a message was rewritten */
     static final String EDITED = "EDITED";
 
@@ -619,6 +622,30 @@ public class ChatServerWSHandler implements WebSocketHandler {
             }
         }
         return recipients;
+    }
+
+    /**
+     * Tells a room how a message now stands after a reaction changed.
+     *
+     * The whole grouped set is sent rather than a delta, so a client that missed
+     * an earlier frame still ends up correct instead of drifting.
+     *
+     * @param roomId    the room the message belongs to
+     * @param messageId the message that was reacted to
+     * @param summaries the reactions after the change
+     */
+    public void announceReactions(String roomId, Long messageId,
+            java.util.List<server.api.ReactionSummary> summaries) {
+
+        StringBuilder body = new StringBuilder();
+        for (server.api.ReactionSummary summary : summaries) {
+            if (body.length() > 0) {
+                body.append(',');
+            }
+            body.append(summary.emoji()).append(':').append(summary.count());
+        }
+
+        sendToRoom(roomId, null, REACTIONS, body.toString(), messageId);
     }
 
     /**
