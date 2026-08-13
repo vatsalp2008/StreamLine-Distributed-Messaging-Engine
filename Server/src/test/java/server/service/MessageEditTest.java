@@ -150,4 +150,56 @@ class MessageEditTest {
 
         assertThat(chatService.countMessages("general")).isEqualTo(1);
     }
+
+    // ---------- audit trail ----------
+
+    @Test
+    void aFreshMessageHasNoEditTime() {
+        assertThat(repository.findById(generalId))
+                .get()
+                .extracting(ChatMessage::getEditedAt)
+                .isNull();
+    }
+
+    @Test
+    void editingRecordsWhenItHappened() {
+        chatService.editMessage("general", generalId, "corrected");
+
+        assertThat(repository.findById(generalId))
+                .get()
+                .extracting(ChatMessage::getEditedAt)
+                .isNotNull();
+    }
+
+    @Test
+    void theEditTimeIsSeparateFromTheSendTime() {
+        chatService.editMessage("general", generalId, "corrected");
+
+        ChatMessage updated = repository.findById(generalId).orElseThrow();
+        // a reader cannot tell "never edited" from "edited instantly" if these
+        // are the same value, which is why editedAt starts null
+        assertThat(updated.getEditedAt()).isNotEqualTo(updated.getTimestamp());
+    }
+
+    @Test
+    void aSecondEditMovesTheEditTimeForward() throws InterruptedException {
+        chatService.editMessage("general", generalId, "first");
+        Instant afterFirst = repository.findById(generalId).orElseThrow().getEditedAt();
+
+        Thread.sleep(5);
+        chatService.editMessage("general", generalId, "second");
+
+        assertThat(repository.findById(generalId).orElseThrow().getEditedAt())
+                .isAfterOrEqualTo(afterFirst);
+    }
+
+    @Test
+    void aFailedEditRecordsNothing() {
+        chatService.editMessage("general", privateId, "hijacked");
+
+        assertThat(repository.findById(privateId))
+                .get()
+                .extracting(ChatMessage::getEditedAt)
+                .isNull();
+    }
 }
