@@ -23,7 +23,7 @@ class ChatServiceTest {
     @BeforeEach
     void setUp() {
         repository = mock(MessageRepository.class);
-        chatService = new ChatService(repository);
+        chatService = new ChatService(repository, mock(server.repository.ReactionRepository.class));
     }
 
     private ChatMessage message(String text, String type) {

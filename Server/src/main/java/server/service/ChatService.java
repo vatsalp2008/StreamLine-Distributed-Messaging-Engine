@@ -20,17 +20,21 @@ public class ChatService {
     private static final Logger log = LoggerFactory.getLogger(ChatService.class);
 
     private final MessageRepository messageRepository;
+    private final server.repository.ReactionRepository reactionRepository;
 
     /** Injectable so a test can assert the recorded edit time. */
     private final java.time.Clock clock;
 
     @org.springframework.beans.factory.annotation.Autowired
-    public ChatService(MessageRepository messageRepository) {
-        this(messageRepository, java.time.Clock.systemUTC());
+    public ChatService(MessageRepository messageRepository,
+            server.repository.ReactionRepository reactionRepository) {
+        this(messageRepository, reactionRepository, java.time.Clock.systemUTC());
     }
 
-    ChatService(MessageRepository messageRepository, java.time.Clock clock) {
+    ChatService(MessageRepository messageRepository,
+            server.repository.ReactionRepository reactionRepository, java.time.Clock clock) {
         this.messageRepository = messageRepository;
+        this.reactionRepository = reactionRepository;
         this.clock = clock;
     }
 
@@ -127,6 +131,72 @@ public class ChatService {
                     message.setEditedAt(clock.instant());
                     return messageRepository.save(message);
                 });
+    }
+
+    /**
+     * Records a reaction to a message.
+     *
+     * Reacting twice the same way is treated as already done rather than an
+     * error: a double click is not a failure, and the caller only needs to know
+     * the reaction is now present.
+     *
+     * @return the message's reactions after the change, or empty when the
+     *         message does not exist in that room
+     */
+    @Transactional
+    public java.util.Optional<List<server.api.ReactionSummary>> addReaction(String roomId,
+            Long messageId, String username, String emoji) {
+
+        return messageRepository.findById(messageId)
+                .filter(message -> roomId.equals(message.getRoomId()))
+                .map(message -> {
+                    if (!reactionRepository.existsByMessageIdAndUsernameAndEmoji(
+                            messageId, username, emoji)) {
+                        server.model.MessageReaction reaction =
+                                new server.model.MessageReaction();
+                        reaction.setMessageId(messageId);
+                        reaction.setRoomId(roomId);
+                        reaction.setUsername(username);
+                        reaction.setEmoji(emoji);
+                        reaction.setCreatedAt(clock.instant());
+                        reactionRepository.save(reaction);
+                    }
+                    return reactionsFor(messageId);
+                });
+    }
+
+    /**
+     * Removes a reaction.
+     *
+     * @return the message's reactions after the change, or empty when there was
+     *         nothing to remove
+     */
+    @Transactional
+    public java.util.Optional<List<server.api.ReactionSummary>> removeReaction(String roomId,
+            Long messageId, String username, String emoji) {
+
+        if (reactionRepository.removeReaction(messageId, roomId, username, emoji) == 0) {
+            return java.util.Optional.empty();
+        }
+        return java.util.Optional.of(reactionsFor(messageId));
+    }
+
+    /**
+     * @return one entry per distinct emoji on the message, in first-used order
+     */
+    @Transactional(readOnly = true)
+    public List<server.api.ReactionSummary> reactionsFor(Long messageId) {
+        java.util.LinkedHashMap<String, List<String>> byEmoji = new java.util.LinkedHashMap<>();
+        for (server.model.MessageReaction reaction
+                : reactionRepository.findByMessageIdOrderByIdAsc(messageId)) {
+            byEmoji.computeIfAbsent(reaction.getEmoji(), key -> new java.util.ArrayList<>())
+                    .add(reaction.getUsername());
+        }
+
+        return byEmoji.entrySet().stream()
+                .map(entry -> new server.api.ReactionSummary(
+                        entry.getKey(), entry.getValue().size(), List.copyOf(entry.getValue())))
+                .toList();
     }
 
     /**
