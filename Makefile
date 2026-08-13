@@ -32,7 +32,7 @@ BENCH_FLAGS := -Dstreamline.url=$(URL) \
                -Dstreamline.rooms=$(ROOMS)
 
 .DEFAULT_GOAL := help
-.PHONY: help build test test-js verify run clean common docker-build docker-up docker-down warmup bench latency check-attribution
+.PHONY: help build test test-js test-postgres verify run clean common docker-build docker-up docker-down warmup bench latency check-attribution
 
 # The two benchmark clients depend on streamline-bench-common through the local
 # repository, so it has to be installed before either of them will resolve.
@@ -52,6 +52,24 @@ build: common ## Compile every module
 # sources no longer compile from scratch.
 test: ## Run the server test suite
 	$(MVN) clean verify -f $(SERVER)
+
+test-postgres: ## Run the schema tests against a real Postgres (needs docker)
+	@# The rest of the suite runs on H2, which generates different DDL and
+	@# accepts SQL Postgres rejects, so a green suite says nothing about the
+	@# database this deploys against.
+	@docker rm -f streamline-pg-test >/dev/null 2>&1 || true
+	@docker run -d --name streamline-pg-test \
+		-e POSTGRES_DB=streamline -e POSTGRES_USER=streamline \
+		-e POSTGRES_PASSWORD=streamline -p 15433:5432 postgres:16-alpine >/dev/null
+	@for i in $$(seq 1 40); do \
+		sleep 2; \
+		docker exec streamline-pg-test pg_isready -U streamline >/dev/null 2>&1 && break; \
+	done; true
+	@POSTGRES_TEST_URL="jdbc:postgresql://localhost:15433/streamline" \
+		$(MVN) test -f $(SERVER) -Dtest=PostgresSchemaTest; \
+	status=$$?; \
+	docker rm -f streamline-pg-test >/dev/null 2>&1 || true; \
+	exit $$status
 
 test-js: ## Run the browser client tests (needs node)
 	@# No npm install: the harness stubs the handful of browser APIs the client
