@@ -226,12 +226,14 @@
     }
 
     if (payload.status === "EDITED") {
-      // "id:new text" — the id is numeric, so the first colon is the separator
-      // and any colon in the message itself is kept
+      // The id is a field of its own now; the "id:new text" body is kept only
+      // so the new text can still be read from it.
       const separator = String(payload.message).indexOf(":");
-      if (separator > 0) {
-        const id = String(payload.message).slice(0, separator);
-        const text = String(payload.message).slice(separator + 1);
+      const id = payload.messageId !== undefined ? String(payload.messageId)
+        : (separator > 0 ? String(payload.message).slice(0, separator) : null);
+      const text = separator > 0 ? String(payload.message).slice(separator + 1) : null;
+
+      if (id !== null && text !== null) {
         const line = linesByStoredId.get(id);
         if (line) {
           const body = line.querySelector(".body");
@@ -243,7 +245,9 @@
     }
 
     if (payload.status === "REDACTED") {
-      const line = linesByStoredId.get(String(payload.message));
+      const redactedId = payload.messageId !== undefined
+        ? String(payload.messageId) : String(payload.message);
+      const line = linesByStoredId.get(redactedId);
       if (line) {
         // struck through rather than removed: a line vanishing with no trace
         // reads as a bug, and the surrounding conversation still refers to it
@@ -252,7 +256,7 @@
         if (body) body.textContent = "message deleted";
         const mark = line.querySelector(".stored");
         if (mark) mark.textContent = "deleted";
-        linesByStoredId.delete(String(payload.message));
+        linesByStoredId.delete(redactedId);
       }
       return;
     }
@@ -262,7 +266,13 @@
       return;
     }
 
-    append(payload.status || "OK", payload.message);
+    const line = append(payload.status || "OK", payload.message);
+
+    // History now names the row it came from, so an edit or deletion can be
+    // applied to a line this client replayed rather than only to one it sent.
+    if (payload.messageId !== undefined) {
+      linesByStoredId.set(String(payload.messageId), line);
+    }
   }
 
   function connect() {

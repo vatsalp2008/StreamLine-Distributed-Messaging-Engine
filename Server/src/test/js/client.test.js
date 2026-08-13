@@ -398,3 +398,67 @@ test("a redacted line hides its controls", () => {
   // the CSS hides them; the class is what the test can assert on
   assert.ok(line.classList.contains("redacted"));
 });
+
+// ---------- messages we did not send ----------
+
+test("a replayed history line becomes identifiable", () => {
+  const { client } = loadClient();
+
+  client.handleFrame({ status: "HISTORY", message: "bob: earlier", messageId: 42 });
+
+  assert.ok(client.linesByStoredId.has("42"));
+});
+
+test("someone else's message stays identifiable after an edit", () => {
+  const { client } = loadClient();
+  client.handleFrame({ status: "HISTORY", message: "bob: earlier", messageId: 42 });
+
+  // this is the whole point: previously only our own messages had known ids
+  client.handleFrame({ status: "EDITED", message: "42:bob corrected it", messageId: 42 });
+
+  // an edit does not consume the id; only a redaction does, so a message can be
+  // edited more than once and then deleted
+  assert.ok(client.linesByStoredId.has("42"));
+});
+
+test("an edit applies to a replayed history line", () => {
+  const { client, elements } = loadClient();
+  client.handleFrame({ status: "HISTORY", message: "bob: earlier", messageId: 42 });
+  const line = elements.get("log").children[0];
+
+  client.handleFrame({ status: "EDITED", message: "42:bob corrected it", messageId: 42 });
+
+  assert.equal(line.querySelector(".body").textContent, "bob corrected it");
+  assert.ok(line.classList.contains("edited"));
+});
+
+test("a redaction applies to a replayed history line", () => {
+  const { client, elements } = loadClient();
+  client.handleFrame({ status: "HISTORY", message: "bob: earlier", messageId: 42 });
+  const line = elements.get("log").children[0];
+
+  client.handleFrame({ status: "REDACTED", message: "42", messageId: 42 });
+
+  assert.ok(line.classList.contains("redacted"));
+  assert.equal(line.querySelector(".body").textContent, "message deleted");
+});
+
+test("the id field is preferred over the packed body", () => {
+  const { client, elements } = loadClient();
+  client.handleFrame({ status: "HISTORY", message: "bob: earlier", messageId: 42 });
+  const line = elements.get("log").children[0];
+
+  // a body whose text itself starts with digits and a colon must not mislead
+  client.handleFrame({ status: "EDITED", message: "42:99: not an id", messageId: 42 });
+
+  assert.equal(line.querySelector(".body").textContent, "99: not an id");
+});
+
+test("a frame with no id is still displayed", () => {
+  const { client, elements } = loadClient();
+
+  client.handleFrame({ status: "BROADCAST", message: "bob: live message" });
+
+  assert.equal(elements.get("log").children.length, 1);
+  assert.equal(client.linesByStoredId.size, 0);
+});
