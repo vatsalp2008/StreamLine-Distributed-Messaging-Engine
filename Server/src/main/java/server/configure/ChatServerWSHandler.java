@@ -339,7 +339,7 @@ public class ChatServerWSHandler implements WebSocketHandler {
                     // line it replayed rather than one it sent itself
                     sendResponse(session, "HISTORY",
                             pastMsg.getUsername() + ": " + pastMsg.getMessage(),
-                            null, pastMsg.getId());
+                            null, pastMsg.getId(), pastMsg.getEditedAt());
                 }
 
                 return chatMessage.getUsername() + " joined the room";
@@ -711,6 +711,16 @@ public class ChatServerWSHandler implements WebSocketHandler {
      */
     private void sendResponse(WebSocketSession session, String status, String message,
             String clientId, Long messageId) {
+        sendResponse(session, status, message, clientId, messageId, null);
+    }
+
+    /**
+     * @param editedAt when the referenced message was last rewritten, or null.
+     *                 Sent with replayed history so a client can mark a message
+     *                 that was edited before it connected.
+     */
+    private void sendResponse(WebSocketSession session, String status, String message,
+            String clientId, Long messageId, Instant editedAt) {
         try {
             Map<String, Object> response = new HashMap<>();
             response.put("status", status);
@@ -721,6 +731,9 @@ public class ChatServerWSHandler implements WebSocketHandler {
             }
             if (messageId != null) {
                 response.put("messageId", messageId);
+            }
+            if (editedAt != null) {
+                response.put("editedAt", editedAt.toString());
             }
 
             String jsonResponse = objectMapperMSG.writeValueAsString(response);

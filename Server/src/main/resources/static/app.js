@@ -273,6 +273,12 @@
     if (payload.messageId !== undefined) {
       linesByStoredId.set(String(payload.messageId), line);
     }
+
+    // A message edited before this client connected is still an edited message;
+    // without this the marker only survived for edits seen live.
+    if (payload.editedAt) {
+      line.classList.add("edited");
+    }
   }
 
   function connect() {

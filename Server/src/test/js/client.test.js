@@ -462,3 +462,23 @@ test("a frame with no id is still displayed", () => {
   assert.equal(elements.get("log").children.length, 1);
   assert.equal(client.linesByStoredId.size, 0);
 });
+
+test("a message edited before we connected is marked in history", () => {
+  const { client, elements } = loadClient();
+
+  client.handleFrame({
+    status: "HISTORY", message: "bob: corrected earlier",
+    messageId: 42, editedAt: "2026-08-13T10:00:00Z"
+  });
+
+  // otherwise the marker only ever survived for edits seen live
+  assert.ok(elements.get("log").children[0].classList.contains("edited"));
+});
+
+test("an unedited history message is not marked", () => {
+  const { client, elements } = loadClient();
+
+  client.handleFrame({ status: "HISTORY", message: "bob: original", messageId: 42 });
+
+  assert.equal(elements.get("log").children[0].classList.contains("edited"), false);
+});
