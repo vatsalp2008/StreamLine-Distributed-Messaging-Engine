@@ -89,6 +89,13 @@ hint, never stored and never echoed back to the sender. Every frame is answered 
 A `PRESENCE` frame is pushed to every member whenever someone joins, leaves, or
 disconnects, so clients never poll for the member list.
 
+Frames that refer to a stored message carry its id in a `messageId` field:
+`HISTORY`, `EDITED` and `REDACTED`. Before that a client only knew the ids of
+messages it had sent itself, because a delivery receipt was the only source of
+one, so it could not apply an edit or deletion to anyone else's message.
+`HISTORY` also carries `editedAt` when the message was rewritten, so a client
+joining later can still tell.
+
 ### Matching a reply to a message
 
 A sender may attach a `clientId` to any frame. The server echoes it on the `OK`
@@ -110,7 +117,9 @@ curl -X PATCH http://localhost:8080/api/rooms/general/messages/12345 \
 The original timestamp is kept, so an edit does not move the message within the
 room's history. Everyone in the room receives an `EDITED` frame carrying
 `id:new text`, and the bundled client rewrites the line in place and marks it.
-Like deletion, editing is scoped by room.
+Like deletion, editing is scoped by room. The stored row records `editedAt`, which
+the API returns on every message, so an edited message stays identifiable after a
+restart rather than only for as long as a client had the page open.
 
 ### Deleting a message
 
