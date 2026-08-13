@@ -335,6 +335,11 @@ test("an edit applies to the right line when several are tracked", () => {
 
 // ---------- acting on our own messages ----------
 
+/** Finds a control by its label, so adding one does not shift the others. */
+function control(line, label) {
+  return line.querySelector(".actions").children.find((c) => c.textContent === label);
+}
+
 /** Sends a message and confirms it, returning the line and its stored id. */
 function ownConfirmedLine(handles, storedId) {
   const line = handles.client.append("OK", "alice: mine");
@@ -349,8 +354,10 @@ test("controls appear on our own message once it is confirmed", () => {
   const line = ownConfirmedLine(handles, "77");
 
   const actions = line.querySelector(".actions");
-  assert.ok(actions, "expected edit and delete controls");
-  assert.deepEqual(actions.children.map((c) => c.textContent), ["edit", "delete"]);
+  assert.ok(actions, "expected message controls");
+  // order-independent: a new control should not break this
+  assert.deepEqual(actions.children.map((c) => c.textContent).sort(),
+    ["delete", "edit", "react"]);
 });
 
 test("someone else's message gets no controls", () => {
@@ -369,7 +376,7 @@ test("delete calls the endpoint for that message", async () => {
   handles.elements.get("room").value = "general";
   const line = ownConfirmedLine(handles, "77");
 
-  line.querySelector(".actions").children[1].dispatch("click");
+  control(line, "delete").dispatch("click");
   await new Promise((resolve) => setTimeout(resolve, 0));
 
   const call = handles.fetchCalls[handles.fetchCalls.length - 1];
@@ -382,7 +389,7 @@ test("delete sends the token when one is set", async () => {
   handles.elements.get("token").value = "s3cret";
   const line = ownConfirmedLine(handles, "77");
 
-  line.querySelector(".actions").children[1].dispatch("click");
+  control(line, "delete").dispatch("click");
   await new Promise((resolve) => setTimeout(resolve, 0));
 
   const call = handles.fetchCalls[handles.fetchCalls.length - 1];
@@ -481,4 +488,76 @@ test("an unedited history message is not marked", () => {
   client.handleFrame({ status: "HISTORY", message: "bob: original", messageId: 42 });
 
   assert.equal(elements.get("log").children[0].classList.contains("edited"), false);
+});
+
+// ---------- reactions ----------
+
+test("a reactions frame draws one chip per emoji", () => {
+  const { client } = loadClient();
+  client.handleFrame({ status: "HISTORY", message: "bob: hi", messageId: 42 });
+
+  client.handleFrame({ status: "REACTIONS", message: "thumbsup:2,heart:1", messageId: 42 });
+
+  const chips = client.linesByStoredId.get("42").querySelector(".reactions").children;
+  assert.deepEqual(chips.map((c) => c.textContent), ["thumbsup 2", "heart 1"]);
+});
+
+test("a later reactions frame replaces the earlier chips", () => {
+  const { client } = loadClient();
+  client.handleFrame({ status: "HISTORY", message: "bob: hi", messageId: 42 });
+  client.handleFrame({ status: "REACTIONS", message: "thumbsup:2", messageId: 42 });
+
+  // the server sends the whole set each time, so this must replace not append
+  client.handleFrame({ status: "REACTIONS", message: "thumbsup:1", messageId: 42 });
+
+  const chips = client.linesByStoredId.get("42").querySelector(".reactions").children;
+  assert.deepEqual(chips.map((c) => c.textContent), ["thumbsup 1"]);
+});
+
+test("clearing every reaction leaves no chips", () => {
+  const { client } = loadClient();
+  client.handleFrame({ status: "HISTORY", message: "bob: hi", messageId: 42 });
+  client.handleFrame({ status: "REACTIONS", message: "thumbsup:1", messageId: 42 });
+
+  client.handleFrame({ status: "REACTIONS", message: "", messageId: 42 });
+
+  assert.equal(
+    client.linesByStoredId.get("42").querySelector(".reactions").children.length, 0);
+});
+
+test("a reactions frame for an unknown message is ignored", () => {
+  const { client, elements } = loadClient();
+  const before = elements.get("log").children.length;
+
+  client.handleFrame({ status: "REACTIONS", message: "thumbsup:1", messageId: 999 });
+
+  assert.equal(elements.get("log").children.length, before);
+});
+
+test("clicking a chip tries to take the reaction back first", async () => {
+  const handles = loadClient();
+  handles.elements.get("room").value = "general";
+  handles.client.handleFrame({ status: "HISTORY", message: "bob: hi", messageId: 42 });
+  handles.client.handleFrame({ status: "REACTIONS", message: "thumbsup:1", messageId: 42 });
+
+  const chip = handles.client.linesByStoredId.get("42")
+    .querySelector(".reactions").children[0];
+  chip.dispatch("click");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  // DELETE first, so a second click on your own reaction removes it
+  const call = handles.fetchCalls[0];
+  assert.equal(call.url, "/api/rooms/general/messages/42/reactions");
+  assert.equal(call.options.method, "DELETE");
+});
+
+test("an emoji containing a colon is still parsed", () => {
+  const { client } = loadClient();
+  client.handleFrame({ status: "HISTORY", message: "bob: hi", messageId: 42 });
+
+  // the count is after the last colon, so a colon in the emoji survives
+  client.handleFrame({ status: "REACTIONS", message: ":wink::3", messageId: 42 });
+
+  const chips = client.linesByStoredId.get("42").querySelector(".reactions").children;
+  assert.deepEqual(chips.map((c) => c.textContent), [":wink: 3"]);
 });
