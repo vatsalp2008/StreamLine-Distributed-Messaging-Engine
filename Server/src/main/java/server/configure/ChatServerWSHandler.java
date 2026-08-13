@@ -335,7 +335,11 @@ public class ChatServerWSHandler implements WebSocketHandler {
                 // Reversing to show oldest first is usually better for chat.
                 for (int i = history.size() - 1; i >= 0; i--) {
                     ChatMessage pastMsg = history.get(i);
-                    sendResponse(session, "HISTORY", pastMsg.getUsername() + ": " + pastMsg.getMessage());
+                    // the id lets a client apply a later edit or deletion to a
+                    // line it replayed rather than one it sent itself
+                    sendResponse(session, "HISTORY",
+                            pastMsg.getUsername() + ": " + pastMsg.getMessage(),
+                            null, pastMsg.getId());
                 }
 
                 return chatMessage.getUsername() + " joined the room";
@@ -594,6 +598,14 @@ public class ChatServerWSHandler implements WebSocketHandler {
      */
     private int sendToRoom(String roomId, WebSocketSession exclude, String status,
             String message) {
+        return sendToRoom(roomId, exclude, status, message, null);
+    }
+
+    /**
+     * @param messageId stored id the frame refers to, carried as its own field
+     */
+    private int sendToRoom(String roomId, WebSocketSession exclude, String status,
+            String message, Long messageId) {
         CopyOnWriteArrayList<WebSocketSession> roomSessions = chatRooms.get(roomId);
         if (roomSessions == null) {
             return 0;
@@ -602,7 +614,7 @@ public class ChatServerWSHandler implements WebSocketHandler {
         int recipients = 0;
         for (WebSocketSession peer : roomSessions) {
             if (exclude == null || !peer.equals(exclude)) {
-                sendResponse(peer, status, message);
+                sendResponse(peer, status, message, null, messageId);
                 recipients++;
             }
         }
@@ -620,7 +632,7 @@ public class ChatServerWSHandler implements WebSocketHandler {
      * @param text      the replacement body
      */
     public void announceEdit(String roomId, Long messageId, String text) {
-        sendToRoom(roomId, null, EDITED, messageId + ":" + text);
+        sendToRoom(roomId, null, EDITED, messageId + ":" + text, messageId);
     }
 
     /**
@@ -633,7 +645,7 @@ public class ChatServerWSHandler implements WebSocketHandler {
      * @param messageId the stored id that was removed
      */
     public void announceRedaction(String roomId, Long messageId) {
-        sendToRoom(roomId, null, REDACTED, String.valueOf(messageId));
+        sendToRoom(roomId, null, REDACTED, String.valueOf(messageId), messageId);
     }
 
     /**
@@ -688,6 +700,17 @@ public class ChatServerWSHandler implements WebSocketHandler {
      */
     private void sendResponse(WebSocketSession session, String status, String message,
             String clientId) {
+        sendResponse(session, status, message, clientId, null);
+    }
+
+    /**
+     * @param messageId stored id this frame refers to, or null when it refers to
+     *                  no stored message. A field of its own rather than packed
+     *                  into the body, so a client never has to parse it out of
+     *                  text that may itself contain separators.
+     */
+    private void sendResponse(WebSocketSession session, String status, String message,
+            String clientId, Long messageId) {
         try {
             Map<String, Object> response = new HashMap<>();
             response.put("status", status);
@@ -695,6 +718,9 @@ public class ChatServerWSHandler implements WebSocketHandler {
             response.put("message", message);
             if (clientId != null && !clientId.isEmpty()) {
                 response.put("clientId", clientId);
+            }
+            if (messageId != null) {
+                response.put("messageId", messageId);
             }
 
             String jsonResponse = objectMapperMSG.writeValueAsString(response);
