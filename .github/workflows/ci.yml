@@ -117,6 +117,41 @@ jobs:
           path: target/smoke/
           if-no-files-found: ignore
 
+  postgres-schema:
+    name: Schema tests on Postgres
+    runs-on: ubuntu-latest
+    # The rest of the suite runs on H2, which generates different DDL and
+    # accepts SQL Postgres rejects, so this is the only job that says anything
+    # about the database the server actually deploys against.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: streamline
+          POSTGRES_USER: streamline
+          POSTGRES_PASSWORD: streamline
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U streamline"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Run schema tests
+        env:
+          POSTGRES_TEST_URL: jdbc:postgresql://localhost:5432/streamline
+        run: mvn -B test -f Server/pom.xml -Dtest=PostgresSchemaTest
+
   browser-client:
     name: Browser client tests
     runs-on: ubuntu-latest
