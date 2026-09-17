@@ -10,7 +10,7 @@ COPY src ./src
 RUN mvn -B -q clean package -DskipTests
 
 # ---- runtime stage ----
-FROM eclipse-temurin:21-jre-alpine
+FROM eclipse-temurin:25-jre-alpine
 WORKDIR /app
 
 # run unprivileged; the H2 file lives on a volume owned by this user
